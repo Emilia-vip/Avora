@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
-export default function Home() {
+export default function profile() {
   const { logout } = useAuth();
   const colors = useAppTheme();
 
@@ -17,10 +17,12 @@ export default function Home() {
           <Text style={[styles.badgeText, { color: colors.accentText }]}>A</Text>
         </View>
 
-        <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-          Välkommen till Avora. Här Kan du se din nästa outfit.
-        </Text>
-
+        <AuthButton
+          title="Logga ut"
+          onPress={logout}
+          variant="ghost"
+          style={styles.logoutButton}
+        />
       </View>
     </SafeAreaView>
   );

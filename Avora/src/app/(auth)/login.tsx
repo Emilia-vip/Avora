@@ -1,80 +1,72 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import {
-  Alert,
-  Button,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert } from 'react-native';
 
+import { AuthButton } from '@/components/auth/auth-button';
+import { AuthInput } from '@/components/auth/auth-input';
+import { AuthLink } from '@/components/auth/auth-link';
+import { AuthScreen } from '@/components/auth/auth-screen';
 import { useAuth } from '@/contexts/auth-context';
 
 export default function Login() {
-  const { login } = useAuth();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
 
-  const handleLogin = () => {
-    if (username && password) {
-      login();
-    } else {
+  const { login } = useAuth();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async() => {
+    if (!email || !password) {
       Alert.alert('Fyll i alla fält');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await login(email.trim().toLowerCase(), password);
+    } catch (error) {
+      Alert.alert('Inloggning misslyckades',
+        error instanceof Error ? error.message : 'Ett fel uppstod'
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Logga in</Text>
-
-      <TextInput
-        placeholder="Användarnamn"
-        value={username}
-        onChangeText={setUsername}
+    <AuthScreen
+      title="Welcome back"
+      subtitle="Sign in to youre wardrobe"
+      footer={
+        <AuthLink
+          text="Inget konto?"
+          linkText="Skapa konto"
+          onPress={() => router.push('/signup')}
+        />
+      }>
+      <AuthInput
+        label="e-post"
+        placeholder="din@email.com"
+        value={email}
+        onChangeText={setEmail}
         autoCapitalize="none"
-        style={styles.input}
+        keyboardType="email-address"
       />
 
-      <TextInput
-        placeholder="Lösenord"
+      <AuthInput
+        label="Lösenord"
+        placeholder="••••••••"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        style={styles.input}
       />
 
-      <Button title="Logga in" onPress={handleLogin} />
-
-      <Pressable onPress={() => router.push('/signup')}>
-        <Text style={styles.link}>Inget konto? Skapa konto</Text>
-      </Pressable>
-    </View>
+      <AuthButton
+        title={loading ? 'Loggar in...' : 'Logga in'}
+        onPress={handleLogin}
+      />
+    </AuthScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-  },
-  link: {
-    textAlign: 'center',
-    color: '#208AEF',
-    marginTop: 8,
-  },
-});
