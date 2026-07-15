@@ -1,25 +1,23 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import {
-  Alert,
-  Button,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert } from 'react-native';
 
+import { AuthButton } from '@/components/auth/auth-button';
+import { AuthInput } from '@/components/auth/auth-input';
+import { AuthLink } from '@/components/auth/auth-link';
+import { AuthScreen } from '@/components/auth/auth-screen';
 import { useAuth } from '@/contexts/auth-context';
 
 export default function Signup() {
-  const { login } = useAuth();
-  const [username, setUsername] = useState('');
+  const { signup } = useAuth();
+
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSignup = () => {
-    if (!username || !password || !confirmPassword) {
+  const handleSignup = async () => {
+    if (!email || !password || !confirmPassword) {
       Alert.alert('Fyll i alla fält');
       return;
     }
@@ -29,68 +27,67 @@ export default function Signup() {
       return;
     }
 
-    // senare: skapa konto mot backend här
-    login();
+    if (password.length < 6) {
+      Alert.alert('Lösenordet måste vara minst 6 tecken');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await signup(email.trim().toLowerCase(), password);
+      // navigation sker via auth-state i _layout.tsx
+    } catch (error) {
+      Alert.alert(
+        'Registrering misslyckades',
+        error instanceof Error ? error.message : 'Något gick fel'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Skapa konto</Text>
-
-      <TextInput
-        placeholder="Användarnamn"
-        value={username}
-        onChangeText={setUsername}
+    <AuthScreen
+      title="Skapa konto"
+      subtitle="Börja din stilresa idag"
+      footer={
+        <AuthLink
+          text="Har du redan konto?"
+          linkText="Logga in"
+          onPress={() => router.push('/login')}
+        />
+      }
+    >
+      <AuthInput
+        label="E-post"
+        placeholder="din@email.com"
+        value={email}
+        onChangeText={setEmail}
         autoCapitalize="none"
-        style={styles.input}
+        keyboardType="email-address"
       />
 
-      <TextInput
-        placeholder="Lösenord"
+      <AuthInput
+        label="Lösenord"
+        placeholder="••••••••"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        style={styles.input}
       />
 
-      <TextInput
-        placeholder="Bekräfta lösenord"
+      <AuthInput
+        label="Bekräfta lösenord"
+        placeholder="••••••••"
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         secureTextEntry
-        style={styles.input}
       />
 
-      <Button title="Skapa konto" onPress={handleSignup} />
-
-      <Pressable onPress={() => router.push('/login')}>
-        <Text style={styles.link}>Har du redan konto? Logga in</Text>
-      </Pressable>
-    </View>
+      <AuthButton
+        title={loading ? 'Skapar konto...' : 'Skapa konto'}
+        onPress={handleSignup}
+      />
+    </AuthScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-  },
-  link: {
-    textAlign: 'center',
-    color: '#208AEF',
-    marginTop: 8,
-  },
-});

@@ -24,18 +24,27 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "backgroundColor": "#208AEF",
-          "android": {
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 76
-          }
-        }
-      ]
-    ],
+  "expo-router",
+  [
+    "expo-splash-screen",
+    {
+      "backgroundColor": "#208AEF",
+      "android": {
+        "image": "./assets/images/splash-icon.png",
+        "imageWidth": 76
+      }
+    }
+  ],
+  "expo-secure-store",
+  "expo-image",
+  [
+    "expo-image-picker",
+    {
+      "cameraPermission": "Avora behöver kameran för att fotografera dina kläder.",
+      "photosPermission": "Avora behöver åtkomst till dina bilder."
+    }
+  ]
+],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
