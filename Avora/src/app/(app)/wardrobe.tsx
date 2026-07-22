@@ -7,6 +7,18 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 export default function Wardrobe() {
   const colors = useAppTheme();
 
+const Categories = [{
+  name: 'Tröja',
+  icon: 'shirt',
+}, {
+  name: 'Skjorta',
+  icon: 'pants',
+}, {
+  name: 'Byxor',
+  icon: 'skirt',
+}]
+
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
       <View style={styles.container}>
@@ -15,6 +27,7 @@ export default function Wardrobe() {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   safe: {

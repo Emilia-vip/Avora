@@ -9,17 +9,19 @@ import {
   useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 
 type AuthScreenProps = {
   title: string;
   subtitle: string;
   children: ReactNode;
   footer?: ReactNode;
+  logoIcon?: ReactNode; 
 };
 
-export function AuthScreen({ title, subtitle, children, footer }: AuthScreenProps) {
+export function AuthScreen({ title, subtitle, children, footer, logoIcon }: AuthScreenProps) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
 
@@ -32,28 +34,35 @@ export function AuthScreen({ title, subtitle, children, footer }: AuthScreenProp
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
+          
+          {/* Header-sektion */}
           <View style={styles.header}>
-            <View style={[styles.logo, { backgroundColor: colors.accent }]}>
-              <Text style={[styles.logoText, { color: colors.accentText }]}>A</Text>
+            <View style={[styles.logo, { backgroundColor: '#1C1B1B' }]}>
+              {logoIcon ? (
+                logoIcon
+              ) : (
+              
+                <Ionicons name="shirt-outline" size={28} color="#FFFFFF" />
+              )}
             </View>
-            <Text style={[styles.brand, { color: colors.text }]}>Avora</Text>
-            <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-            <Text style={[styles.subtitle, { color: colors.textMuted }]}>{subtitle}</Text>
+            <Text style={[styles.brand, { color: '#1C1B1B' }]}>Virtual Wardrobe</Text>
+            <Text style={[styles.brandSubtitle, { color: '#7E7E7E' }]}>Your personal style, curated.</Text>
           </View>
 
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                shadowColor: colors.shadow,
-              },
-            ]}>
+          {/* Titelsektion */}
+          <View style={styles.titleContainer}>
+            <Text style={[styles.title, { color: '#1C1B1B' }]}>{title}</Text>
+            <Text style={[styles.subtitle, { color: '#7E7E7E' }]}>{subtitle}</Text>
+          </View>
+
+          {/* Formulär-sektion (Kortet är borttaget, nu en ren container) */}
+          <View style={styles.formContainer}>
             {children}
           </View>
 
+          {/* Footer-sektion */}
           {footer ? <View style={styles.footer}>{footer}</View> : null}
+          
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -69,54 +78,63 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    justifyContent: 'center',
-    padding: Spacing.lg,
-    gap: Spacing.lg,
+    paddingHorizontal: Spacing.xl, // Lite mer luft på sidorna som i bilden
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
+    justifyContent: 'space-between', // Sprider ut elementen elegant över skärmen
   },
   header: {
     alignItems: 'center',
-    gap: Spacing.sm,
+    marginTop: 20,
+    marginBottom: 40,
   },
   logo: {
-    width: 56,
-    height: 56,
-    borderRadius: Radius.lg,
+    width: 64,
+    height: 64,
+    borderRadius: 18, // Mjukt rundade hörn på logotypen
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.xs,
+    marginBottom: Spacing.md,
   },
   logoText: {
     fontSize: 28,
-    fontWeight: '700',
   },
   brand: {
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    fontSize: 24,
+    fontWeight: '400',
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', // Elegant serif-typsnitt som i bilden
+    textAlign: 'center',
+  },
+  brandSubtitle: {
+    fontSize: 13,
+    fontWeight: '400',
+    marginTop: 4,
+    color: '#7E7E7E',
+  },
+  titleContainer: {
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginTop: Spacing.sm,
+    fontSize: 32,
+    fontWeight: '400',
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', // Samma serif-stil här
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 14,
+    color: '#7E7E7E',
+    marginTop: 6,
     textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: 280,
   },
-  card: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.lg,
+  formContainer: {
+    width: '100%',
     gap: Spacing.md,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    elevation: 2,
+    marginBottom: Spacing.lg,
   },
   footer: {
     alignItems: 'center',
+    marginTop: 'auto', // Skuffar ner footern till botten
+    paddingBottom: 10,
   },
 });

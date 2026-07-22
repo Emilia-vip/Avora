@@ -41,14 +41,14 @@ export default function Login() {
       subtitle="Sign in to youre wardrobe"
       footer={
         <AuthLink
-          text="Inget konto?"
-          linkText="Skapa konto"
+          text="No account?"
+          linkText="Create an account"
           onPress={() => router.push('/signup')}
         />
       }>
       <AuthInput
-        label="e-post"
-        placeholder="din@email.com"
+        label="EMAIL"
+        placeholder="your@email.com"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -56,7 +56,7 @@ export default function Login() {
       />
 
       <AuthInput
-        label="Lösenord"
+          label="PASSWORD"
         placeholder="••••••••"
         value={password}
         onChangeText={setPassword}
