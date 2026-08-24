@@ -8,7 +8,7 @@ import { AuthLink } from '@/components/auth/auth-link';
 import { AuthScreen } from '@/components/auth/auth-screen';
 import { useAuth } from '@/contexts/auth-context';
 
-export default function Signup() {
+ function Signup() {
   const { signup } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -91,3 +91,4 @@ export default function Signup() {
     </AuthScreen>
   );
 }
+export default Signup;

@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
-export default function profile() {
+ function profile() {
   const { logout } = useAuth();
   const colors = useAppTheme();
 
@@ -86,3 +86,5 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
 });
+
+export default profile;

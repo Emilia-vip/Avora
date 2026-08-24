@@ -8,7 +8,7 @@ import { AuthLink } from '@/components/auth/auth-link';
 import { AuthScreen } from '@/components/auth/auth-screen';
 import { useAuth } from '@/contexts/auth-context';
 
-export default function Login() {
+ function Login() {
 
   const { login } = useAuth();
 
@@ -70,3 +70,5 @@ export default function Login() {
     </AuthScreen>
   );
 }
+
+export default Login;

@@ -1,8 +1,8 @@
 export const Colors = {
   light: {
     background: '#F7F5F2',
-    card: '#FFFFFF',
-    text: '#2E2E2C',
+    card: '#675a4b',
+    text: '#e4e4d9',
     textMuted: '#7A7772',
     border: '#E6E2DC',
     input: '#FAF9F7',
