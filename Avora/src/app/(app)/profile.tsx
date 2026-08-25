@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, Card} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthButton } from '@/components/auth/auth-button';
@@ -16,6 +16,17 @@ import { useAppTheme } from '@/hooks/use-app-theme';
         <View style={[styles.badge, { backgroundColor: colors.accent }]}>
           <Text style={[styles.badgeText, { color: colors.accentText }]}>A</Text>
         </View>
+
+        <View>
+          <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Emilia Eriksson</Text>
+        </View>
+
+         <View key={label} style={[styles.stat, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
+              <Text style={[styles.statLabel, { color: colors.textMuted }]}>{label}</Text>
+              <Text style={[styles.statUnit, { color: colors.textMuted }]}>{unit}</Text>
+            </View>
 
         <AuthButton
           title="Logga ut"
