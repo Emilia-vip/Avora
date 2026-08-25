@@ -25,6 +25,10 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+## Backend setup
+
+Open the Supabase dashboard, go to **SQL Editor**, and run `supabase/schema.sql` once. This creates the clothing table, private image storage, and row-level security for each logged-in user.
+
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)

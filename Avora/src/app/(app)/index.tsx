@@ -1,22 +1,66 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/auth-context';
 import { Spacing } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { supabase } from '@/lib/supabase';
 
-const wardrobeItems = [
-  { id: '1', name: 'Linen shirt', brand: 'COS', image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400&h=500&fit=crop&auto=format' },
-  { id: '2', name: 'Tailored trousers', brand: '& Other Stories', image: 'https://images.unsplash.com/photo-1594938298603-c8148c4b4de1?w=400&h=500&fit=crop&auto=format' },
-  { id: '3', name: 'White sneakers', brand: 'Common Projects', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=500&fit=crop&auto=format' },
-  { id: '4', name: 'Structured tote', brand: 'Polene', image: 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&h=500&fit=crop&auto=format' },
-];
+type ClothingItem = { id: string; name: string; brand: string | null; category: string; image: string | null };
 
 export default function Home() {
+
+
+function capitalizeName(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
   const { user } = useAuth();
   const colors = useAppTheme();
-  const name = user?.email?.split('@')[0] ?? 'there';
+  const name = user?.email
+    ? capitalizeName(user.email.split('@')[0])
+    : 'There';
+  const [wardrobeItems, setWardrobeItems] = useState<ClothingItem[]>([]);
+  const [request, setRequest] = useState('');
+  const [suggestion, setSuggestion] = useState<ClothingItem[]>([]);
+  const [styling, setStyling] = useState(false);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    const loadItems = async () => {
+      if (!user) return;
+      const { data } = await supabase.from('clothing_items').select('id, name, brand, category, image_path').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (!data || !active) return;
+      const result = await Promise.all(data.map(async (item) => {
+        const signed = item.image_path ? await supabase.storage.from('wardrobe-images').createSignedUrl(item.image_path, 3600) : null;
+        return { ...item, image: signed?.data?.signedUrl ?? null } as ClothingItem;
+      }));
+      if (active) setWardrobeItems(result);
+    };
+    loadItems();
+    return () => { active = false; };
+  }, [user]));
+
+  const createSuggestion = () => {
+    const text = request.trim().toLowerCase();
+    if (!text || wardrobeItems.length === 0) return;
+    setStyling(true);
+    const isDinner = text.includes('dinner') || text.includes('date') || text.includes('evening');
+    const isBusiness = text.includes('business') || text.includes('work') || text.includes('meeting');
+    const isSummer = text.includes('summer') || text.includes('warm') || text.includes('hot');
+    const preferred = (category: string[]) => wardrobeItems.find((item) => category.includes(item.category));
+    const outfit = isDinner && preferred(['Dresses'])
+      ? [preferred(['Dresses']), preferred(['Shoes']), preferred(['Accessories'])]
+      : [preferred(['Tops']), preferred(['Bottoms']), preferred(['Shoes']), preferred(['Jackets'])];
+    const filtered = outfit.filter((item): item is ClothingItem => Boolean(item));
+    setSuggestion(filtered.length ? filtered : wardrobeItems.slice(0, 3));
+    setStyling(false);
+    void isBusiness;
+    void isSummer;
+  };
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -45,12 +89,18 @@ export default function Home() {
             <Text style={styles.outfitMetaText}>Casual</Text>
           </View>
           <View style={styles.outfitImages}>
-            {wardrobeItems.map((item) => <Image key={item.id} source={{ uri: item.image }} style={styles.outfitImage} />)}
+            {wardrobeItems.slice(0, 4).map((item) => item.image && <Image key={item.id} source={{ uri: item.image }} style={styles.outfitImage} />)}
           </View>
           <View style={styles.match}>
             <Text style={styles.matchText}>94% match</Text>
             <Ionicons name="star" size={11} color={colors.accent} />
           </View>
+        </View>
+
+        <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.aiHeading}><View style={[styles.aiIcon, { backgroundColor: colors.accent }]}><Ionicons name="sparkles" size={15} color={colors.accentText} /></View><View><Text style={[styles.aiTitle, { color: colors.text }]}>Mini AI Stylist</Text><Text style={[styles.aiSubtitle, { color: colors.textMuted }]}>Ask for an outfit from your wardrobe</Text></View></View>
+          <View style={[styles.aiInputWrap, { backgroundColor: colors.input, borderColor: colors.border }]}><TextInput value={request} onChangeText={setRequest} placeholder="Dinner outfit, casual Friday..." placeholderTextColor={colors.textMuted} style={[styles.aiInput, { color: colors.text }]} onSubmitEditing={createSuggestion} returnKeyType="done" /><Pressable onPress={createSuggestion} style={[styles.send, { backgroundColor: colors.primary }]}><Ionicons name="arrow-forward" size={16} color={colors.onPrimary} /></Pressable></View>
+          {styling ? <Text style={[styles.aiResultText, { color: colors.textMuted }]}>Styling your look...</Text> : suggestion.length > 0 ? <View><Text style={[styles.aiResultText, { color: colors.text }]}>I found a look for “{request}”</Text><View style={styles.suggestionImages}>{suggestion.map((item) => item.image && <Image key={item.id} source={{ uri: item.image }} style={styles.suggestionImage} />)}</View></View> : null}
         </View>
 
         <View style={styles.stats}>
@@ -71,7 +121,7 @@ export default function Home() {
           {wardrobeItems.map((item) => (
             <View key={item.id} style={styles.favoriteItem}>
               <View style={styles.favoriteImageWrap}>
-                <Image source={{ uri: item.image }} style={styles.favoriteImage} />
+                {item.image ? <Image source={{ uri: item.image }} style={styles.favoriteImage} /> : null}
                 <View style={styles.heart}><Ionicons name="heart" size={11} color={colors.text} /></View>
               </View>
               <Text numberOfLines={1} style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
@@ -119,4 +169,15 @@ const styles = StyleSheet.create({
   heart: { position: 'absolute', top: 9, right: 9, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
   itemName: { fontSize: 11, fontWeight: '600', marginTop: 8 },
   itemBrand: { fontSize: 10, marginTop: 2 },
+  aiCard: { borderRadius: 22, borderWidth: 1, padding: 16, marginBottom: 24 },
+  aiHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  aiIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  aiTitle: { fontSize: 14, fontWeight: '600' },
+  aiSubtitle: { fontSize: 10, marginTop: 2 },
+  aiInputWrap: { height: 46, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 13, paddingRight: 5 },
+  aiInput: { flex: 1, fontSize: 12 },
+  send: { width: 35, height: 35, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  aiResultText: { fontSize: 11, marginTop: 14 },
+  suggestionImages: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  suggestionImage: { width: 58, height: 70, borderRadius: 12 },
 });
