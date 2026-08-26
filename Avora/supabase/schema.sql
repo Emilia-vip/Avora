@@ -5,11 +5,20 @@ create table if not exists public.clothing_items (
   category text not null,
   brand text,
   color text,
+  pattern text,
+  material text,
+  style text,
+  description text,
   season text default 'All',
   image_path text,
   favorite boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+alter table public.clothing_items add column if not exists pattern text;
+alter table public.clothing_items add column if not exists material text;
+alter table public.clothing_items add column if not exists style text;
+alter table public.clothing_items add column if not exists description text;
 
 create index if not exists clothing_items_user_id_idx
   on public.clothing_items(user_id);
