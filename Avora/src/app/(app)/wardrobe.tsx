@@ -9,7 +9,18 @@ import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { supabase } from '@/lib/supabase';
 
-type ClothingItem = { id: string; name: string; brand: string | null; category: string; color: string | null; image: string | null; favorite: boolean };
+type ClothingItem = {
+  id: string;
+  name: string;
+  brand: string | null;
+  category: string;
+  color: string | null;
+  pattern: string | null;
+  material: string | null;
+  style: string | null;
+  image: string | null;
+  favorite: boolean;
+};
 
 const categories = ['All', 'Tops', 'Bottoms', 'Dresses', 'Shoes'];
 
@@ -70,7 +81,9 @@ export default function Wardrobe() {
   );
   const filteredItems = useMemo(() => items.filter((item) => {
     const matchesCategory = category === 'All' || item.category === category;
-    const matchesQuery = `${item.name} ${item.brand} ${item.color}`.toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = `${item.name} ${item.brand} ${item.color} ${item.pattern} ${item.material} ${item.style}`
+      .toLowerCase()
+      .includes(query.toLowerCase());
     return matchesCategory && matchesQuery;
   }), [category, query]);
 
@@ -112,7 +125,9 @@ export default function Wardrobe() {
               <Pressable onPress={() => toggleFavorite(item.id)} style={styles.heart}><Ionicons name={favorites.has(item.id) ? 'heart' : 'heart-outline'} size={14} color={favorites.has(item.id) ? '#D97979' : colors.text} /></Pressable>
             </View>
             <Text numberOfLines={1} style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
-            <Text style={[styles.itemMeta, { color: colors.textMuted }]}>{item.brand} · {item.color}</Text>
+            <Text style={[styles.itemMeta, { color: colors.textMuted }]}>
+              {[item.color, item.pattern, item.material, item.style].filter(Boolean).join(' · ') || item.brand}
+            </Text>
           </View>)}
         </View>
       </ScrollView>

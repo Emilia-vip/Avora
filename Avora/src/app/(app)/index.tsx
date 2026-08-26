@@ -1,42 +1,51 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/auth-context';
 import { Spacing } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { functionErrorMessage } from '@/lib/function-error';
+import { matchOutfitFromWardrobe, type OutfitSuggestion, type WardrobeItem } from '@/lib/outfit-match';
 import { supabase } from '@/lib/supabase';
-
-type ClothingItem = { id: string; name: string; brand: string | null; category: string; image: string | null };
-
-export default function Home() {
-
 
 function capitalizeName(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+export default function Home() {
   const { user } = useAuth();
   const colors = useAppTheme();
   const name = user?.email
     ? capitalizeName(user.email.split('@')[0])
     : 'There';
-  const [wardrobeItems, setWardrobeItems] = useState<ClothingItem[]>([]);
+  const [wardrobeItems, setWardrobeItems] = useState<WardrobeItem[]>([]);
   const [request, setRequest] = useState('');
-  const [suggestion, setSuggestion] = useState<ClothingItem[]>([]);
+  const [look, setLook] = useState<OutfitSuggestion | null>(null);
   const [styling, setStyling] = useState(false);
 
   useFocusEffect(useCallback(() => {
     let active = true;
     const loadItems = async () => {
       if (!user) return;
-      const { data } = await supabase.from('clothing_items').select('id, name, brand, category, image_path').eq('user_id', user.id).order('created_at', { ascending: false });
+      const query = await supabase
+        .from('clothing_items')
+        .select('id, name, brand, category, color, pattern, material, style, season, image_path')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      const { data } = query.error
+        ? await supabase
+          .from('clothing_items')
+          .select('id, name, brand, category, color, image_path')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+        : query;
       if (!data || !active) return;
       const result = await Promise.all(data.map(async (item) => {
         const signed = item.image_path ? await supabase.storage.from('wardrobe-images').createSignedUrl(item.image_path, 3600) : null;
-        return { ...item, image: signed?.data?.signedUrl ?? null } as ClothingItem;
+        return { ...item, image: signed?.data?.signedUrl ?? null } as WardrobeItem;
       }));
       if (active) setWardrobeItems(result);
     };
@@ -44,22 +53,55 @@ function capitalizeName(value: string) {
     return () => { active = false; };
   }, [user]));
 
-  const createSuggestion = () => {
-    const text = request.trim().toLowerCase();
-    if (!text || wardrobeItems.length === 0) return;
+  const createSuggestion = async () => {
+    const wish = request.trim();
+    if (!wish) {
+      Alert.alert('Skriv ett önskemål', 'Till exempel “dejt i kväll” eller “casual fredag”.');
+      return;
+    }
+    if (wardrobeItems.length < 2) {
+      Alert.alert('För få plagg', 'Lägg till minst två plagg i garderoben först.');
+      return;
+    }
+
     setStyling(true);
-    const isDinner = text.includes('dinner') || text.includes('date') || text.includes('evening');
-    const isBusiness = text.includes('business') || text.includes('work') || text.includes('meeting');
-    const isSummer = text.includes('summer') || text.includes('warm') || text.includes('hot');
-    const preferred = (category: string[]) => wardrobeItems.find((item) => category.includes(item.category));
-    const outfit = isDinner && preferred(['Dresses'])
-      ? [preferred(['Dresses']), preferred(['Shoes']), preferred(['Accessories'])]
-      : [preferred(['Tops']), preferred(['Bottoms']), preferred(['Shoes']), preferred(['Jackets'])];
-    const filtered = outfit.filter((item): item is ClothingItem => Boolean(item));
-    setSuggestion(filtered.length ? filtered : wardrobeItems.slice(0, 3));
-    setStyling(false);
-    void isBusiness;
-    void isSummer;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('suggest-outfit', {
+        headers: sessionData.session?.access_token
+          ? { Authorization: `Bearer ${sessionData.session.access_token}` }
+          : undefined,
+        body: { wish },
+      });
+
+      if (error) throw new Error(await functionErrorMessage(error));
+      if (data?.error) throw new Error(data.error);
+
+      const itemIds = data?.suggestion?.itemIds as string[] | undefined;
+      const selected = (itemIds ?? [])
+        .map((id) => wardrobeItems.find((item) => item.id === id))
+        .filter((item): item is WardrobeItem => Boolean(item));
+
+      if (selected.length >= 2) {
+        setLook({
+          items: selected,
+          title: data.suggestion.title ?? wish,
+          reason: data.suggestion.reason ?? '',
+          matchPercent: Number(data.suggestion.matchPercent ?? 80),
+        });
+        return;
+      }
+
+      const fallback = matchOutfitFromWardrobe(wardrobeItems, wish);
+      if (!fallback) throw new Error('Kunde inte sätta ihop en look från garderoben.');
+      setLook(fallback);
+    } catch {
+      const fallback = matchOutfitFromWardrobe(wardrobeItems, wish);
+      if (fallback) setLook(fallback);
+      else Alert.alert('Kunde inte skapa look', 'Försök med ett annat önskemål eller lägg till fler plagg.');
+    } finally {
+      setStyling(false);
+    }
   };
 
   return (
@@ -76,31 +118,33 @@ function capitalizeName(value: string) {
           </Pressable>
         </View>
 
+        {/* Väder-widget: dagens väder, temperatur och en liten ikon. */}
+
         <View style={[styles.outfitCard, { backgroundColor: colors.primary }]}>
           <View style={styles.outfitHeader}>
             <View style={styles.sparkle}><Ionicons name="sparkles" size={13} color={colors.accent} /></View>
             <Text style={[styles.outfitLabel, { color: colors.accent }]}>TODAY'S OUTFIT</Text>
           </View>
-          <Text style={styles.outfitTitle}>Warm Summer Day</Text>
+          <Text style={styles.outfitTitle}>{look?.title ?? 'Dagens look'}</Text>
           <View style={styles.outfitMeta}>
             <Ionicons name="sunny-outline" size={13} color="rgba(255,255,255,0.65)" />
-            <Text style={styles.outfitMetaText}>24 C Sunny</Text>
-            <Text style={styles.outfitSeparator}>•</Text>
-            <Text style={styles.outfitMetaText}>Casual</Text>
+            <Text style={[styles.outfitMetaText, { flex: 1 }]} numberOfLines={3}>{look?.reason ?? 'Skriv ett önskemål nedan så sätter AI ihop plagg som passar.'}</Text>
           </View>
           <View style={styles.outfitImages}>
-            {wardrobeItems.slice(0, 4).map((item) => item.image && <Image key={item.id} source={{ uri: item.image }} style={styles.outfitImage} />)}
+            {(look?.items ?? wardrobeItems.slice(0, 4)).map((item) => (
+              item.image ? <Image key={item.id} source={{ uri: item.image }} style={styles.outfitImage} /> : null
+            ))}
           </View>
           <View style={styles.match}>
-            <Text style={styles.matchText}>94% match</Text>
+            <Text style={styles.matchText}>{look ? `${look.matchPercent}% match` : '—'}</Text>
             <Ionicons name="star" size={11} color={colors.accent} />
           </View>
         </View>
 
         <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.aiHeading}><View style={[styles.aiIcon, { backgroundColor: colors.accent }]}><Ionicons name="sparkles" size={15} color={colors.accentText} /></View><View><Text style={[styles.aiTitle, { color: colors.text }]}>Mini AI Stylist</Text><Text style={[styles.aiSubtitle, { color: colors.textMuted }]}>Ask for an outfit from your wardrobe</Text></View></View>
-          <View style={[styles.aiInputWrap, { backgroundColor: colors.input, borderColor: colors.border }]}><TextInput value={request} onChangeText={setRequest} placeholder="Dinner outfit, casual Friday..." placeholderTextColor={colors.textMuted} style={[styles.aiInput, { color: colors.text }]} onSubmitEditing={createSuggestion} returnKeyType="done" /><Pressable onPress={createSuggestion} style={[styles.send, { backgroundColor: colors.primary }]}><Ionicons name="arrow-forward" size={16} color={colors.onPrimary} /></Pressable></View>
-          {styling ? <Text style={[styles.aiResultText, { color: colors.textMuted }]}>Styling your look...</Text> : suggestion.length > 0 ? <View><Text style={[styles.aiResultText, { color: colors.text }]}>I found a look for “{request}”</Text><View style={styles.suggestionImages}>{suggestion.map((item) => item.image && <Image key={item.id} source={{ uri: item.image }} style={styles.suggestionImage} />)}</View></View> : null}
+          <View style={styles.aiHeading}><View style={[styles.aiIcon, { backgroundColor: colors.accent }]}><Ionicons name="sparkles" size={15} color={colors.accentText} /></View><View><Text style={[styles.aiTitle, { color: colors.text }]}>Mini AI Stylist</Text><Text style={[styles.aiSubtitle, { color: colors.textMuted }]}>Skriv ett önskemål så plockas plagg som passar ihop</Text></View></View>
+          <View style={[styles.aiInputWrap, { backgroundColor: colors.input, borderColor: colors.border }]}><TextInput value={request} onChangeText={setRequest} placeholder="Dejt i kväll, casual fredag, jobbintervju..." placeholderTextColor={colors.textMuted} style={[styles.aiInput, { color: colors.text }]} onSubmitEditing={createSuggestion} returnKeyType="done" /><Pressable onPress={createSuggestion} style={[styles.send, { backgroundColor: colors.primary }]}><Ionicons name="arrow-forward" size={16} color={colors.onPrimary} /></Pressable></View>
+          {styling ? <Text style={[styles.aiResultText, { color: colors.textMuted }]}>Sätter ihop en look från din garderob...</Text> : look ? <View><Text style={[styles.aiResultText, { color: colors.text }]}>{look.reason}</Text><Text style={[styles.aiItemNames, { color: colors.textMuted }]}>{look.items.map((item) => item.name).join(' · ')}</Text><View style={styles.suggestionImages}>{look.items.map((item) => item.image ? <Image key={item.id} source={{ uri: item.image }} style={styles.suggestionImage} /> : <View key={item.id} style={[styles.suggestionImage, { backgroundColor: colors.input }]} />)}</View></View> : null}
         </View>
 
         <View style={styles.stats}>
@@ -177,7 +221,8 @@ const styles = StyleSheet.create({
   aiInputWrap: { height: 46, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 13, paddingRight: 5 },
   aiInput: { flex: 1, fontSize: 12 },
   send: { width: 35, height: 35, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  aiResultText: { fontSize: 11, marginTop: 14 },
+  aiResultText: { fontSize: 11, marginTop: 14, lineHeight: 16 },
+  aiItemNames: { fontSize: 10, marginTop: 6 },
   suggestionImages: { flexDirection: 'row', gap: 8, marginTop: 10 },
   suggestionImage: { width: 58, height: 70, borderRadius: 12 },
 });

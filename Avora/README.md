@@ -19,51 +19,119 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    EXPO_PUBLIC_SUPABASE_ANON_KEY=...
    ```
 
-3. Start the app
+# Avora
+
+Avora är en mobilapp för att organisera garderoben och skapa outfitförslag från dina egna kläder. Appen är byggd med Expo och React Native, använder Expo Router för navigering och Supabase för autentisering, databas och bildlagring.
+
+## Funktioner
+
+- Skapa konto och logga in med e-post och lösenord.
+- Fotografera plagg direkt med kameran.
+- Spara plagg med namn, kategori, märke och färg.
+- Visa, sök och filtrera garderoben.
+- Markera favoritplagg.
+- Se outfitförslag och be Mini AI Stylist om en look utifrån garderoben.
+- Hålla varje användares plagg och bilder privata med Row Level Security.
+
+## Teknik
+
+- [Expo SDK 54](https://docs.expo.dev/)
+- React Native 0.81 och React 19
+- TypeScript
+- [Expo Router](https://docs.expo.dev/router/introduction)
+- [Supabase](https://supabase.com/) Auth, Postgres och Storage
+- `expo-image-picker` för kamerabilder
+
+## Förutsättningar
+
+Installera följande innan du börjar:
+
+- Node.js LTS
+- npm
+- Ett Supabase-projekt
+- Expo Go eller en iOS-/Android-simulator
+
+## Installation
+
+1. Installera projektets beroenden:
 
    ```bash
-   npx expo start
+   npm install
    ```
 
-## Backend setup
+2. Skapa en lokal miljövariabelfil:
 
-Open the Supabase dashboard, go to **SQL Editor**, and run `supabase/schema.sql` once. This creates the clothing table, private image storage, and row-level security for each logged-in user.
+   ```bash
+   cp .env.example .env
+   ```
 
-In the output, you'll find options to open the app in a
+3. Öppna `.env` och ange projektets URL och publika Supabase-nyckel:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   ```text
+   EXPO_PUBLIC_SUPABASE_URL=https://ditt-projekt.supabase.co
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=din-anon-eller-publishable-key
+   ```
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+   Använd en anon/publishable key i appen. Lägg aldrig in en Supabase service role key i `.env` eller i klientkod.
 
-## Get a fresh project
+## Konfigurera Supabase
 
-When you're ready, run:
+1. Öppna Supabase Dashboard för projektet.
+2. Gå till **SQL Editor**.
+3. Kör innehållet i [`supabase/schema.sql`](supabase/schema.sql) en gång.
+
+Skriptet skapar tabellen `clothing_items`, den privata Storage-bucketen `wardrobe-images` och RLS-policyer som begränsar åtkomst till den inloggade användarens egna data. Bilder sparas i en mapp med användarens UUID och visas via tidsbegränsade signed URLs.
+
+## Starta appen
+
+Starta Expo-utvecklingsservern:
 
 ```bash
-npm run reset-project
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Vanliga kommandon:
 
-### Other setup steps
+```bash
+npm run ios       # iOS-simulator
+npm run android   # Android-emulator
+npm run web       # webbversion
+npm run lint      # ESLint
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Skanna QR-koden med Expo Go eller tryck `i` för iOS-simulator och `a` för Android-emulator.
 
-## Learn more
+## Projektstruktur
 
-To learn more about developing your project with Expo, look at the following resources:
+```text
+src/
+├── app/                 # Skärmar och Expo Router-routes
+│   ├── (auth)/          # Login och registrering
+│   └── (app)/           # Hem, garderob, outfits, profil och lägg till
+├── components/          # Återanvändbara UI-komponenter
+├── constants/           # Tema och spacing
+├── contexts/            # Auth-state
+├── hooks/               # Appens hooks
+└── lib/                 # Supabase-klient
+supabase/
+└── schema.sql           # Databas-, Storage- och RLS-konfiguration
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Utveckling
 
-## Join the community
+Appens routes ligger i `src/app` och följer Expo Routers filbaserade routing. Efter ändringar kan Expo-cachen rensas med:
 
-Join our community of developers creating universal apps.
+```bash
+npx expo start -c
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Felsökning
+
+- Kontrollera att filen `.env` finns i projektroten och att variabelnamnen är exakt rättstavade.
+- Starta om Expo efter ändringar i `.env`.
+- Om registrering eller inloggning ger `UNAUTHORIZED_INVALID_API_KEY`, kontrollera att Supabase-nyckeln hör till rätt projekt och inte är återkallad.
+- Om bilder inte visas, kontrollera att `supabase/schema.sql` har körts och att Storage-bucketen heter `wardrobe-images`.
+
+## Licens
+
+Se [`LICENSE`](LICENSE) för projektets licens.
