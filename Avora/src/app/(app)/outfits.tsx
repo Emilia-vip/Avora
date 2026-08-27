@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { matchOutfitFromWardrobe, type OutfitSuggestion, type WardrobeItem } from '@/lib/outfit-match';
 import { supabase } from '@/lib/supabase';
+import { useWeather } from '@/hooks/use-weather';
 
 const wishes = ['vardag', 'jobbintervju', 'dejt i kväll'];
 
@@ -17,6 +18,7 @@ export default function Outfits() {
   const { user } = useAuth();
   const [wardrobeItems, setWardrobeItems] = useState<WardrobeItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const weather = useWeather();
 
   useFocusEffect(
     useCallback(() => {
@@ -56,13 +58,13 @@ export default function Outfits() {
     const suggestions: OutfitSuggestion[] = [];
     for (const wish of wishes) {
       const remaining = wardrobeItems.filter((item) => !used.has(item.id));
-      const look = matchOutfitFromWardrobe(remaining.length >= 2 ? remaining : wardrobeItems, wish);
+      const look = matchOutfitFromWardrobe(remaining.length >= 2 ? remaining : wardrobeItems, wish, weather);
       if (!look) continue;
       look.items.forEach((item) => used.add(item.id));
       suggestions.push(look);
     }
     return suggestions;
-  }, [wardrobeItems]);
+  }, [wardrobeItems, weather]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -70,7 +72,9 @@ export default function Outfits() {
         <View style={styles.header}>
           <View>
             <Text style={[styles.title, { color: colors.text }]}>Outfits</Text>
-            <Text style={[styles.subtitle, { color: colors.textMuted }]}>Ihopsatta från din garderob</Text>
+            <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+              {weather ? `Anpassat till ${weather.summary}` : 'Ihopsatta från din garderob'}
+            </Text>
           </View>
           <View style={[styles.iconButton, { backgroundColor: colors.card }]}><Ionicons name="sparkles-outline" size={19} color={colors.text} /></View>
         </View>

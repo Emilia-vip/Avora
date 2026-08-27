@@ -1,3 +1,5 @@
+import type { WeatherSnapshot } from '@/lib/weather';
+
 export type WardrobeItem = {
   id: string;
   name: string;
@@ -25,12 +27,16 @@ const NEUTRALS = [
   'brun', 'khaki', 'camel', 'offwhite', 'ivory', 'black', 'white', 'grey', 'gray', 'navy',
 ];
 
-export function matchOutfitFromWardrobe(items: WardrobeItem[], wish: string): OutfitSuggestion | null {
+export function matchOutfitFromWardrobe(
+  items: WardrobeItem[],
+  wish: string,
+  weather?: WeatherSnapshot | null,
+): OutfitSuggestion | null {
   if (items.length === 0) return null;
 
   const occasion = detectOccasion(wish);
   const ranked = [...items]
-    .map((item) => ({ item, score: occasionScore(item, occasion, wish) }))
+    .map((item) => ({ item, score: occasionScore(item, occasion, wish, weather) }))
     .sort((left, right) => right.score - left.score);
 
   const bySlot = new Map<Slot, WardrobeItem[]>();
@@ -62,21 +68,24 @@ export function matchOutfitFromWardrobe(items: WardrobeItem[], wish: string): Ou
     for (const bottom of take(bottoms, 5)) {
       const base = [top, bottom];
       const shoe = bestCompanion(base, shoes);
-      const jacket = occasion === 'casual' ? undefined : bestCompanion([...base, shoe].filter(Boolean) as WardrobeItem[], jackets);
+      const jacket = wantsOuterwear(weather, occasion)
+        ? bestCompanion([...base, shoe].filter(Boolean) as WardrobeItem[], jackets)
+        : undefined;
       const accessory = bestCompanion([...base, shoe, jacket].filter(Boolean) as WardrobeItem[], accessories);
       candidates.push(compact([...base, shoe, jacket, accessory]));
     }
   }
 
   for (const dress of take(dresses, 4)) {
-    candidates.push(compact([dress, bestCompanion([dress], shoes), bestCompanion([dress], accessories)]));
+    const jacket = wantsOuterwear(weather, occasion) ? bestCompanion([dress], jackets) : undefined;
+    candidates.push(compact([dress, bestCompanion([dress], shoes), jacket, bestCompanion([dress], accessories)]));
   }
 
   const unique = candidates
     .filter((outfit) => outfit.length >= 2)
     .map((outfit) => ({
       outfit,
-      score: scoreOutfit(outfit, occasion, wish),
+      score: scoreOutfit(outfit, occasion, wish, weather),
     }))
     .sort((left, right) => right.score - left.score);
 
@@ -93,7 +102,7 @@ export function matchOutfitFromWardrobe(items: WardrobeItem[], wish: string): Ou
   return {
     items: winner.outfit,
     title: titleForOccasion(occasion, wish),
-    reason: explainOutfit(winner.outfit, occasion),
+    reason: explainOutfit(winner.outfit, occasion, weather),
     matchPercent: Math.max(68, Math.min(97, Math.round(winner.score))),
   };
 }
@@ -139,7 +148,26 @@ function toSlot(category: string): Slot | null {
   return null;
 }
 
-function occasionScore(item: WardrobeItem, occasion: ReturnType<typeof detectOccasion>, wish: string) {
+function wantsOuterwear(weather: WeatherSnapshot | null | undefined, occasion: ReturnType<typeof detectOccasion>) {
+  if (weather?.isRainy || weather?.isCold) return true;
+  return occasion === 'cold' || occasion === 'formal';
+}
+
+function weatherScore(item: WardrobeItem, weather?: WeatherSnapshot | null) {
+  if (!weather) return 0;
+  const slot = toSlot(item.category);
+  const haystack = `${item.name} ${item.material} ${item.category} ${item.style}`.toLowerCase();
+  let score = 0;
+  if (weather.isCold && (slot === 'jacket' || /(ylle|ull|stickat|kappa|täck|hoodie)/.test(haystack))) score += 16;
+  if (weather.isCold && /(linne|short|sandal)/.test(haystack)) score -= 14;
+  if (weather.isWarm && (slot === 'jacket' || /(kappa|ylle|täck|puffer)/.test(haystack))) score -= 14;
+  if (weather.isWarm && /(linne|kort|short|sandal|bomull)/.test(haystack)) score += 10;
+  if (weather.isRainy && slot === 'jacket') score += 14;
+  if (weather.isRainy && /(sandal|mocka)/.test(haystack)) score -= 16;
+  return score;
+}
+
+function occasionScore(item: WardrobeItem, occasion: ReturnType<typeof detectOccasion>, wish: string, weather?: WeatherSnapshot | null) {
   let score = 10;
   const haystack = `${item.name} ${item.style} ${item.color} ${item.material} ${item.pattern} ${item.category}`.toLowerCase();
   for (const word of wish.toLowerCase().split(/\s+/).filter((part) => part.length > 3)) {
@@ -153,6 +181,7 @@ function occasionScore(item: WardrobeItem, occasion: ReturnType<typeof detectOcc
   if (occasion === 'casual' && /(casual|street|vardag)/.test(style + haystack)) score += 10;
   if (occasion === 'summer' && /(linne|bomull|kort|sommar)/.test(haystack)) score += 12;
   if (occasion === 'cold' && /(ylle|stickat|kappa|jacka|ull)/.test(haystack)) score += 12;
+  score += weatherScore(item, weather);
   return score;
 }
 
@@ -161,13 +190,19 @@ function bestCompanion(base: WardrobeItem[], options: WardrobeItem[]) {
   return [...options].sort((left, right) => harmony(base, right) - harmony(base, left))[0];
 }
 
-function scoreOutfit(outfit: WardrobeItem[], occasion: ReturnType<typeof detectOccasion>, wish: string) {
+function scoreOutfit(
+  outfit: WardrobeItem[],
+  occasion: ReturnType<typeof detectOccasion>,
+  wish: string,
+  weather?: WeatherSnapshot | null,
+) {
   const slots = outfit.map((item) => toSlot(item.category));
   let score = 50;
   if (slots.includes('dress') || (slots.includes('top') && slots.includes('bottom'))) score += 20;
   if (slots.includes('shoes')) score += 10;
+  if (wantsOuterwear(weather, occasion) && slots.includes('jacket')) score += 12;
   if (new Set(slots).size === slots.length) score += 8;
-  score += outfit.reduce((sum, item) => sum + occasionScore(item, occasion, wish) / outfit.length, 0);
+  score += outfit.reduce((sum, item) => sum + occasionScore(item, occasion, wish, weather) / outfit.length, 0);
   score += harmony(outfit.slice(0, -1), outfit[outfit.length - 1]);
   const styles = outfit.map((item) => (item.style ?? '').toLowerCase()).filter(Boolean);
   if (styles.length > 1 && styles.every((style) => style.includes(styles[0].slice(0, 4)) || /casual|minimal/.test(style))) {
@@ -209,7 +244,11 @@ function isLoudPattern(pattern: string | null) {
   return /(blommig|rutig|prickig|animal|leopard|zebra|grafisk|paisley)/.test(value);
 }
 
-function explainOutfit(outfit: WardrobeItem[], occasion: ReturnType<typeof detectOccasion>) {
+function explainOutfit(
+  outfit: WardrobeItem[],
+  occasion: ReturnType<typeof detectOccasion>,
+  weather?: WeatherSnapshot | null,
+) {
   const names = outfit.map((item) => item.name).join(', ');
   const colors = [...new Set(outfit.flatMap((item) => colorTokens(item.color)))].slice(0, 3).join(' och ');
   const vibe = occasion === 'evening'
@@ -219,7 +258,8 @@ function explainOutfit(outfit: WardrobeItem[], occasion: ReturnType<typeof detec
       : occasion === 'sport'
         ? 'för träning'
         : 'som sitter ihop i vardagen';
-  return `${names} funkar ${vibe}${colors ? `, med ${colors}` : ''}.`;
+  const weatherBit = weather ? ` Anpassad till ${weather.summary}.` : '';
+  return `${names} funkar ${vibe}${colors ? `, med ${colors}` : ''}.${weatherBit}`;
 }
 
 function compact(items: Array<WardrobeItem | undefined>) {

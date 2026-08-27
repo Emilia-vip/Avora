@@ -38,11 +38,12 @@ serve(async (request) => {
       throw new Error("Edge Function secrets saknas.");
     }
 
-    const body = await request.json() as { wish?: string };
+    const body = await request.json() as { wish?: string; weather?: string | null };
     const wish = body.wish?.trim();
     if (!wish) {
       return jsonResponse({ error: "Skriv ett önskemål för outfiten." }, 400);
     }
+    const weather = body.weather?.trim() || null;
 
     const accessToken = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
@@ -66,7 +67,7 @@ serve(async (request) => {
       return jsonResponse({ error: "Garderoben är tom. Lägg till plagg först." }, 400);
     }
 
-    const suggestion = await suggestOutfit(wish, items, geminiApiKey);
+    const suggestion = await suggestOutfit(wish, items, geminiApiKey, weather);
     const allowed = new Set(items.map((item) => item.id));
     const itemIds = suggestion.itemIds.filter((id) => allowed.has(id));
 
@@ -94,6 +95,7 @@ async function suggestOutfit(
   wish: string,
   items: Array<Record<string, unknown>>,
   apiKey: string,
+  weather: string | null,
 ) {
   const wardrobe = items.map((item) => ({
     id: item.id,
@@ -123,15 +125,17 @@ async function suggestOutfit(
               text: `Du är stylist för en garderobs-app. Sätt ihop EN outfit från ENDAST plaggen i listan.
 Regler:
 - Använd bara id:n som finns i listan.
-- Välj 2-4 plagg som passar både önskemålet och varandra (färg, stil, mönster, tillfälle).
+- Välj 2-4 plagg som passar både önskemålet, varandra och vädret (färg, stil, mönster, tillfälle, temperatur).
+- Kallt eller regn: prioritera jacka/kappa och stängda skor.
+- Varmt: undvik tunga jackor, välj lättare plagg.
 - Blanda inte två överdelar. Klänning ersätter topp+byxa.
 - Max ett starkt mönster. Neutrala färger får gärna bära upp starka färger.
-- Svara på svenska i title och reason.`,
+- Svara på svenska i title och reason och nämn vädret kort.`,
             }],
           },
           contents: [{
             parts: [{
-              text: `Önskemål: ${wish}\n\nGarderob:\n${JSON.stringify(wardrobe)}`,
+              text: `Önskemål: ${wish}\nVäder: ${weather ?? "okänt"}\n\nGarderob:\n${JSON.stringify(wardrobe)}`,
             }],
           }],
           generationConfig: {
