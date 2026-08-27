@@ -118,7 +118,7 @@ export default function Wardrobe() {
         </ScrollView>
         {loadError ? <Text style={[styles.error, { color: colors.textMuted }]}>Kunde inte läsa garderoben: {loadError}</Text> : null}
         <View style={styles.grid}>
-          {!loading && filteredItems.length === 0 && <Text style={{ color: colors.textMuted }}>{items.length === 0 ? 'No clothes saved yet.' : 'No clothes match your search.'}</Text>}
+          {!loading && filteredItems.length === 0 && <Text style={{ color: colors.textMuted }}>{items.length === 0 ? 'No clothes saved yet.' : 'Add some clothes to your wardrobe to get started.'}</Text>}
           {filteredItems.map((item) => <View key={item.id} style={styles.item}>
             <View style={styles.imageWrap}>
               {item.image ? <Image source={{ uri: item.image }} style={styles.image} /> : null}
