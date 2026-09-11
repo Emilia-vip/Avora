@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Avora",
+    "slug": "Avora",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/Avora logga.jpg",
+    "scheme": "avora",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/images/Avora logga.jpg"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/Avora logga.jpg",
+        "backgroundImage": "./assets/images/Avora logga.jpg",
+        "monochromeImage": "./assets/images/Avora logga.jpg"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/Avora logga.jpg"
+    },
+    "plugins": [
+  "expo-router",
+  "expo-font",
+  "expo-image",
+  "expo-status-bar",
+  "expo-web-browser",
+  [
+    "expo-splash-screen",
+    {
+      "backgroundColor": "#208AEF",
+        "ios": {
+          "image": "./assets/images/Avora logga.jpg",
+        "imageWidth": 280,
+        "resizeMode": "contain"
+        },
+      "android": {
+        "image": "./assets/images/Avora logga.jpg",
+        "imageWidth": 280,
+        "resizeMode": "contain"
+      }
+    }
+  ],
+  "expo-secure-store",
+  [
+    "expo-image-picker",
+    {
+      "cameraPermission": "Avora behöver kameran för att fotografera dina kläder.",
+      "photosPermission": "Avora behöver åtkomst till dina bilder."
+    }
+  ]
+],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
