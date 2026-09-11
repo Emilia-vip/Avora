@@ -1,0 +1,34 @@
+# OS
+.DS_Store
+**/.DS_Store
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies & build
+node_modules/
+**/node_modules/
+.expo/
+**/.expo/
+dist/
+**/dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+
+# Logs / cache
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+.cache/
+
+# Editor / agents (optional local)
+.claude/

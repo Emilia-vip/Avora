@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Radius, Shadows, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { genderFromUser } from '@/lib/gender';
 import { matchOutfitFromWardrobe, type OutfitSuggestion, type WardrobeItem } from '@/lib/outfit-match';
 import { loadUserSettings } from '@/lib/user-settings';
 import { loadWardrobeCache, saveWardrobeCache } from '@/lib/wardrobe-cache';
@@ -21,6 +22,7 @@ export default function Outfits() {
   const [wardrobeItems, setWardrobeItems] = useState<WardrobeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const weather = useWeather();
+  const gender = genderFromUser(user);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,13 +73,18 @@ export default function Outfits() {
     const suggestions: OutfitSuggestion[] = [];
     for (const wish of wishes) {
       const remaining = wardrobeItems.filter((item) => !used.has(item.id));
-      const look = matchOutfitFromWardrobe(remaining.length >= 2 ? remaining : wardrobeItems, wish, weather);
+      const look = matchOutfitFromWardrobe(
+        remaining.length >= 2 ? remaining : wardrobeItems,
+        wish,
+        weather,
+        gender,
+      );
       if (!look) continue;
       look.items.forEach((item) => used.add(item.id));
       suggestions.push(look);
     }
     return suggestions;
-  }, [wardrobeItems, weather]);
+  }, [wardrobeItems, weather, gender]);
 
   const softCard = {
     backgroundColor: colors.card,

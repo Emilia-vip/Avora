@@ -1,4 +1,5 @@
 import { categorySlot, type ClothingSlot } from '@/lib/clothing-category';
+import type { GenderValue } from '@/lib/gender';
 import type { WeatherSnapshot } from '@/lib/weather';
 
 export type WardrobeItem = {
@@ -32,12 +33,13 @@ export function matchOutfitFromWardrobe(
   items: WardrobeItem[],
   wish: string,
   weather?: WeatherSnapshot | null,
+  gender?: GenderValue | null,
 ): OutfitSuggestion | null {
   if (items.length === 0) return null;
 
   const occasion = detectOccasion(wish);
   const ranked = [...items]
-    .map((item) => ({ item, score: occasionScore(item, occasion, wish, weather) }))
+    .map((item) => ({ item, score: occasionScore(item, occasion, wish, weather, gender) }))
     .sort((left, right) => right.score - left.score);
 
   const bySlot = new Map<Slot, WardrobeItem[]>();
@@ -86,7 +88,7 @@ export function matchOutfitFromWardrobe(
     .filter((outfit) => outfit.length >= 2)
     .map((outfit) => ({
       outfit,
-      score: scoreOutfit(outfit, occasion, wish, weather),
+      score: scoreOutfit(outfit, occasion, wish, weather, gender),
     }))
     .sort((left, right) => right.score - left.score);
 
@@ -158,7 +160,13 @@ function weatherScore(item: WardrobeItem, weather?: WeatherSnapshot | null) {
   return score;
 }
 
-function occasionScore(item: WardrobeItem, occasion: ReturnType<typeof detectOccasion>, wish: string, weather?: WeatherSnapshot | null) {
+function occasionScore(
+  item: WardrobeItem,
+  occasion: ReturnType<typeof detectOccasion>,
+  wish: string,
+  weather?: WeatherSnapshot | null,
+  gender?: GenderValue | null,
+) {
   let score = 10;
   const haystack = `${item.name} ${item.style} ${item.color} ${item.material} ${item.pattern} ${item.category}`.toLowerCase();
   for (const word of wish.toLowerCase().split(/\s+/).filter((part) => part.length > 3)) {
@@ -173,7 +181,26 @@ function occasionScore(item: WardrobeItem, occasion: ReturnType<typeof detectOcc
   if (occasion === 'summer' && /(linne|bomull|kort|sommar)/.test(haystack)) score += 12;
   if (occasion === 'cold' && /(ylle|stickat|kappa|jacka|ull)/.test(haystack)) score += 12;
   score += weatherScore(item, weather);
+  score += genderScore(item, gender);
   return score;
+}
+
+function genderScore(item: WardrobeItem, gender?: GenderValue | null) {
+  if (!gender || gender === 'other') return 0;
+  const slot = categorySlot(item.category);
+  const haystack = `${item.name} ${item.category} ${item.style}`.toLowerCase();
+
+  if (gender === 'female') {
+    if (slot === 'dress' || /(klänning|kjol|blus|heels|klack)/.test(haystack)) return 8;
+    if (/(kostymbyxa|fluga|necktie)/.test(haystack)) return -4;
+  }
+
+  if (gender === 'male') {
+    if (slot === 'dress' || /(klänning|kjol|klack|heels)/.test(haystack)) return -10;
+    if (/(skjorta|chino|kostym|sneaker|loafers)/.test(haystack)) return 6;
+  }
+
+  return 0;
 }
 
 function bestCompanion(base: WardrobeItem[], options: WardrobeItem[]) {
@@ -186,14 +213,16 @@ function scoreOutfit(
   occasion: ReturnType<typeof detectOccasion>,
   wish: string,
   weather?: WeatherSnapshot | null,
+  gender?: GenderValue | null,
 ) {
   const slots = outfit.map((item) => categorySlot(item.category));
   let score = 50;
   if (slots.includes('dress') || (slots.includes('top') && slots.includes('bottom'))) score += 20;
+  if (slots.includes('shoes') && gender === 'male' && slots.includes('dress')) score -= 20;
   if (slots.includes('shoes')) score += 10;
   if (wantsOuterwear(weather, occasion) && slots.includes('jacket')) score += 12;
   if (new Set(slots).size === slots.length) score += 8;
-  score += outfit.reduce((sum, item) => sum + occasionScore(item, occasion, wish, weather) / outfit.length, 0);
+  score += outfit.reduce((sum, item) => sum + occasionScore(item, occasion, wish, weather, gender) / outfit.length, 0);
   score += harmony(outfit.slice(0, -1), outfit[outfit.length - 1]);
   const styles = outfit.map((item) => (item.style ?? '').toLowerCase()).filter(Boolean);
   if (styles.length > 1 && styles.every((style) => style.includes(styles[0].slice(0, 4)) || /casual|minimal/.test(style))) {

@@ -8,6 +8,7 @@ import { AuthLink } from '@/components/auth/auth-link';
 import { AuthScreen } from '@/components/auth/auth-screen';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { GENDER_OPTIONS, type GenderValue } from '@/lib/gender';
 
 const STYLE_DNA_OPTIONS = [
   'Smart Casual',
@@ -32,7 +33,7 @@ function Signup() {
   const colors = useAppTheme();
 
   const [name, setName] = useState('');
-  const [gender, setGender] = useState('');
+  const [gender, setGender] = useState<GenderValue | ''>('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -56,6 +57,11 @@ function Signup() {
       return;
     }
 
+    if (!gender) {
+      Alert.alert('Välj kön', 'Det hjälper AI:n att ge bättre outfitförslag.');
+      return;
+    }
+
     if (selectedStyleDna.length === 0) {
       Alert.alert('Välj minst en Style DNA');
       return;
@@ -74,7 +80,7 @@ function Signup() {
     setLoading(true);
 
     try {
-      await signup(email.trim().toLowerCase(), password, name.trim(), selectedStyleDna);
+      await signup(email.trim().toLowerCase(), password, name.trim(), selectedStyleDna, gender);
       // Navigation sker via auth-state i _layout.tsx
     } catch (error) {
       Alert.alert(
@@ -106,13 +112,38 @@ function Signup() {
         autoCapitalize="words"
       />
 
-      <AuthInput
-        label="Gender (male or female)"
-        placeholder="your gender"
-        value={gender}
-        onChangeText={(text) => setGender(text)}
-        autoCapitalize="none"
-      />
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Kön</Text>
+        <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
+          Används för mer relevanta AI-förslag.
+        </Text>
+        <View style={styles.chips}>
+          {GENDER_OPTIONS.map((option) => {
+            const selected = gender === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => setGender(option.value)}
+                style={({ pressed }) => [
+                  styles.chip,
+                  {
+                    borderColor: selected ? colors.accent : colors.border,
+                    backgroundColor: selected ? `${colors.accent}22` : 'transparent',
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}>
+                <Text
+                  style={[
+                    styles.chipText,
+                    { color: selected ? colors.accent : colors.text },
+                  ]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Style DNA</Text>
@@ -130,21 +161,16 @@ function Signup() {
                 style={({ pressed }) => [
                   styles.chip,
                   {
-                    borderColor: colors.border,
+                    borderColor: selected ? colors.accent : colors.border,
                     backgroundColor: selected ? `${colors.accent}22` : 'transparent',
                     opacity: pressed ? 0.85 : 1,
                   },
-                  selected
-                    ? {
-                        borderColor: colors.accent,
-                      }
-                    : null,
                 ]}
               >
                 <Text
                   style={[
                     styles.chipText,
-                    { color: selected ? colors.accentText : colors.text },
+                    { color: selected ? colors.accent : colors.text },
                   ]}
                 >
                   {option}
@@ -219,4 +245,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

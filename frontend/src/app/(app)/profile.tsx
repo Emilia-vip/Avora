@@ -13,6 +13,7 @@ import {
   resolveAvatarUrl,
   uploadProfileAvatar,
 } from '@/lib/profile-avatar';
+import { GENDER_OPTIONS, genderFromUser, genderLabel, type GenderValue } from '@/lib/gender';
 import { supabase } from '@/lib/supabase';
 import { userDisplayName } from '@/lib/user-name';
 import { loadUserSettings, setUserSetting, type UserSettings } from '@/lib/user-settings';
@@ -43,7 +44,7 @@ const STAT_ICONS = {
 } as const;
 
 export default function Profile() {
-  const { logout, updateStyleDna, user } = useAuth();
+  const { logout, updateStyleDna, updateGender, user } = useAuth();
   const colors = useAppTheme();
   const displayName = userDisplayName(user, 'Profil');
   const email = typeof user?.email === 'string' ? user.email : 'you@mail.com';
@@ -64,11 +65,17 @@ export default function Profile() {
   const [isEditingStyleDna, setIsEditingStyleDna] = useState(false);
   const [styleDnaDraft, setStyleDnaDraft] = useState<string[]>([]);
   const [styleDnaSaving, setStyleDnaSaving] = useState(false);
+  const [gender, setGender] = useState<GenderValue | null>(null);
+  const [genderSaving, setGenderSaving] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [planLabel, setPlanLabel] = useState('Member');
 
   const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    setGender(genderFromUser(user));
+  }, [user]);
 
   useEffect(() => {
     let active = true;
@@ -300,6 +307,21 @@ export default function Profile() {
     }
   };
 
+  const handleSelectGender = async (next: GenderValue) => {
+    if (genderSaving || gender === next) return;
+    const previous = gender;
+    setGender(next);
+    setGenderSaving(true);
+    try {
+      await updateGender(next);
+    } catch {
+      setGender(previous);
+      Alert.alert('Kunde inte spara kön.');
+    } finally {
+      setGenderSaving(false);
+    }
+  };
+
   const pickAvatarFromLibrary = async () => {
     if (!user) {
       Alert.alert('Logga in', 'Du måste vara inloggad för att byta profilbild.');
@@ -408,6 +430,9 @@ export default function Profile() {
                 <View style={[styles.planDot, { backgroundColor: colors.accent }]} />
                 <Text style={[styles.planText, { color: colors.text }]}>{planLabel}</Text>
               </View>
+              <Text style={[styles.genderMeta, { color: colors.textMuted }]}>
+                {genderLabel(gender)}
+              </Text>
             </View>
           </View>
         </View>
@@ -426,6 +451,40 @@ export default function Profile() {
               <Text style={[styles.statLabel, { color: colors.textMuted }]}>{stat.label}</Text>
             </View>
           ))}
+        </View>
+
+        <View style={[styles.styleCard, softCard]}>
+          <Text style={[styles.sectionKicker, { color: colors.accent }]}>Profil</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Kön</Text>
+          <Text style={[styles.styleHint, { color: colors.textMuted }]}>
+            AI:n använder detta för mer relevanta outfitförslag.
+          </Text>
+          <View style={styles.tagWrap}>
+            {GENDER_OPTIONS.map((option) => {
+              const selected = gender === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  disabled={genderSaving}
+                  onPress={() => handleSelectGender(option.value)}
+                  style={[
+                    styles.tag,
+                    selected
+                      ? { backgroundColor: colors.primary }
+                      : { backgroundColor: colors.input },
+                    genderSaving ? { opacity: 0.7 } : null,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.tagText,
+                      { color: selected ? colors.onPrimary : colors.text },
+                    ]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
         <View style={[styles.styleCard, softCard]}>
@@ -690,6 +749,10 @@ const styles = StyleSheet.create({
   planText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  genderMeta: {
+    fontSize: 12,
+    marginTop: 6,
   },
   statsRow: {
     flexDirection: 'row',

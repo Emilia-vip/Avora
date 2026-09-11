@@ -13,9 +13,16 @@ type AuthContextType = {
   isLoading: boolean;
   user: Session['user'] | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name: string, styleDna: string[]) => Promise<void>;
+  signup: (
+    email: string,
+    password: string,
+    name: string,
+    styleDna: string[],
+    gender: string,
+  ) => Promise<void>;
   updateName: (name: string) => Promise<void>;
   updateStyleDna: (styleDna: string[]) => Promise<void>;
+  updateGender: (gender: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -49,12 +56,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
-  const signup = async (email: string, password: string, name: string, styleDna: string[]) => {
+  const signup = async (
+    email: string,
+    password: string,
+    name: string,
+    styleDna: string[],
+    gender: string,
+  ) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: name.trim(), style_dna: styleDna },
+        data: {
+          full_name: name.trim(),
+          style_dna: styleDna,
+          gender,
+        },
       },
     });
 
@@ -76,6 +93,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
+  const updateGender = async (gender: string) => {
+    const { error } = await supabase.auth.updateUser({
+      data: { gender },
+    });
+    if (error) throw error;
+  };
+
   const logout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
@@ -91,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signup,
         updateName,
         updateStyleDna,
+        updateGender,
         logout,
       }}
     >

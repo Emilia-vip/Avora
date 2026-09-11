@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useWeather } from '@/hooks/use-weather';
 import { functionErrorMessage } from '@/lib/function-error';
+import { genderFromUser } from '@/lib/gender';
 import { matchOutfitFromWardrobe, type OutfitSuggestion, type WardrobeItem } from '@/lib/outfit-match';
 import { loadUserSettings } from '@/lib/user-settings';
 import { loadWardrobeCache } from '@/lib/wardrobe-cache';
@@ -82,8 +83,8 @@ export default function Home() {
 
   useEffect(() => {
     if (look || wardrobeItems.length < 2 || !weather) return;
-    setLook(matchOutfitFromWardrobe(wardrobeItems, 'dagens look', weather));
-  }, [look, wardrobeItems, weather]);
+    setLook(matchOutfitFromWardrobe(wardrobeItems, 'dagens look', weather, genderFromUser(user)));
+  }, [look, wardrobeItems, weather, user]);
 
   const previewItems = useMemo(() => {
     const favorites = wardrobeItems.filter((item) => 'favorite' in item && Boolean((item as WardrobeItem & { favorite?: boolean }).favorite));
@@ -101,10 +102,12 @@ export default function Home() {
       return;
     }
 
+    const gender = genderFromUser(user);
+
     setStyling(true);
     try {
       if (!aiSuggestionsEnabled) {
-        const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather);
+        const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather, gender);
         if (!fallback) throw new Error('Kunde inte sätta ihop en look från garderoben.');
         setLook(fallback);
         return;
@@ -115,7 +118,7 @@ export default function Home() {
         headers: sessionData.session?.access_token
           ? { Authorization: `Bearer ${sessionData.session.access_token}` }
           : undefined,
-        body: { wish, weather: weather?.summary ?? null },
+        body: { wish, weather: weather?.summary ?? null, gender },
       });
 
       if (error) throw new Error(await functionErrorMessage(error));
@@ -136,11 +139,11 @@ export default function Home() {
         return;
       }
 
-      const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather);
+      const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather, gender);
       if (!fallback) throw new Error('Kunde inte sätta ihop en look från garderoben.');
       setLook(fallback);
     } catch {
-      const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather);
+      const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather, gender);
       if (fallback) setLook(fallback);
       else Alert.alert('Kunde inte skapa look', 'Försök med ett annat önskemål eller lägg till fler plagg.');
     } finally {
