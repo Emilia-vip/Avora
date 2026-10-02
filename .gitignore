@@ -32,3 +32,6 @@ yarn-error.*
 
 # Editor / agents (optional local)
 .claude/
+
+# Supabase CLI local state
+backend/supabase/.temp/
