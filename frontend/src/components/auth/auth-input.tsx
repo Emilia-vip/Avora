@@ -36,7 +36,7 @@ export function AuthInput({ label, style, ...props }: AuthInputProps) {
           styles.input,
           {
             backgroundColor: colors.input,
-            borderColor: focused ? colors.primary : colors.border,
+            borderColor: focused ? colors.accent : colors.input,
             color: colors.text,
           },
           style,
@@ -53,11 +53,10 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    letterSpacing: 0.2,
   },
   input: {
     borderWidth: 1.5,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     paddingHorizontal: Spacing.md,
     paddingVertical: 14,
     fontSize: 16,

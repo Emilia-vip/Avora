@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   StyleSheet,
@@ -9,18 +10,25 @@ import {
 } from 'react-native';
 
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { Image } from 'expo-image';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Radius, Shadows, Spacing } from '@/constants/theme';
+import { GarmentEditor, type GarmentEditorHandle } from '@/components/garment/garment-editor';
+import { displayTitle, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { CLOTHING_CATEGORIES, normalizeCategory } from '@/lib/clothing-category';
 import { supabase } from '@/lib/supabase';
 import { loadUserSettings } from '@/lib/user-settings';
+
+const BUCKET = 'wardrobe-images';
+/** Photos are shrunk before upload so the AI functions stay fast. */
+const MAX_UPLOAD_WIDTH = 1200;
+
+type CutoutStatus = 'idle' | 'working' | 'done' | 'failed';
 
 export default function Add() {
   const colors = useAppTheme();
@@ -38,6 +46,15 @@ export default function Add() {
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadedPath, setUploadedPath] = useState<string | null>(null);
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(true);
+  const [cutoutPath, setCutoutPath] = useState<string | null>(null);
+  const [cutoutUri, setCutoutUri] = useState<string | null>(null);
+  const [cutoutStatus, setCutoutStatus] = useState<CutoutStatus>('idle');
+  const [cutoutError, setCutoutError] = useState<string | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const editorRef = useRef<GarmentEditorHandle>(null);
+  // Ignores AI results that arrive after the user has already taken a new photo.
+  const photoRun = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -80,9 +97,15 @@ export default function Add() {
 
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      setPhotoUri(asset.uri);
+      const uri = await shrinkPhoto(asset.uri, asset.width);
+      setPhotoUri(uri);
       setUploadedPath(null);
-      await analyzePhoto(asset.uri);
+      setCutoutPath(null);
+      setCutoutUri(null);
+      setCutoutStatus('idle');
+      setCutoutError(null);
+      setShowOriginal(false);
+      await analyzePhoto(uri);
     }
   };
 
@@ -96,25 +119,42 @@ export default function Add() {
       return;
     }
 
+    const run = ++photoRun.current;
     setAnalyzing(true);
+    setCutoutStatus('working');
     try {
-      const imageResponse = await fetch(uri);
-      const imageData = await imageResponse.arrayBuffer();
-      const imagePath = `${user.id}/${Date.now()}.jpg`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('wardrobe-images')
-        .upload(imagePath, imageData, { contentType: 'image/jpeg', upsert: false });
-
-      if (uploadError) throw uploadError;
+      const imagePath = newImagePath(user.id, 'jpg');
+      await uploadFile(uri, imagePath, 'image/jpeg');
+      if (run !== photoRun.current) return;
       setUploadedPath(imagePath);
 
       const { data: sessionData } = await supabase.auth.getSession();
+      const headers = sessionData.session?.access_token
+        ? { Authorization: `Bearer ${sessionData.session.access_token}` }
+        : undefined;
+
+      // Details and cut-out run side by side; either one may fail without blocking the other.
+      await Promise.all([
+        readDetails(imagePath, headers, run),
+        cutOutGarment(imagePath, headers, run),
+      ]);
+    } catch (error) {
+      if (run !== photoRun.current) return;
+      setCutoutStatus('failed');
+      Alert.alert(
+        'Kunde inte ladda upp bilden',
+        error instanceof Error ? error.message : 'Du kan fylla i fälten manuellt.'
+      );
+    } finally {
+      if (run === photoRun.current) setAnalyzing(false);
+    }
+  };
+
+  const readDetails = async (imagePath: string, headers: Record<string, string> | undefined, run: number) => {
+    try {
       const { data, error } = await supabase.functions.invoke('analyze-clothing', {
-        headers: sessionData.session?.access_token
-          ? { Authorization: `Bearer ${sessionData.session.access_token}` }
-          : undefined,
-        body: { storagePath: imagePath, bucket: 'wardrobe-images' },
+        headers,
+        body: { storagePath: imagePath, bucket: BUCKET },
       });
 
       if (error) throw new Error(await functionErrorMessage(error));
@@ -130,6 +170,7 @@ export default function Add() {
       } | undefined;
 
       if (!analysis) throw new Error('Ingen analys kom tillbaka från AI.');
+      if (run !== photoRun.current) return;
 
       const analyzedCategory = normalizeCategory(analysis.category);
       if (analyzedCategory) setCategory(analyzedCategory);
@@ -139,13 +180,49 @@ export default function Add() {
       if (analysis.style) setStyle(analysis.style);
       if (!name.trim() && analysis.description) setName(analysis.description);
     } catch (error) {
+      if (run !== photoRun.current) return;
       Alert.alert(
         'Kunde inte analysera bilden',
         error instanceof Error ? error.message : 'Du kan fylla i fälten manuellt.'
       );
-    } finally {
-      setAnalyzing(false);
     }
+  };
+
+  const cutOutGarment = async (imagePath: string, headers: Record<string, string> | undefined, run: number) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('cutout-clothing', {
+        headers,
+        body: { storagePath: imagePath, bucket: BUCKET },
+      });
+      if (error) throw new Error(await functionErrorMessage(error));
+      if (data?.error || !data?.cutoutPath) throw new Error(data?.error ?? 'Inget urklipp.');
+
+      const signed = await supabase.storage.from(BUCKET).createSignedUrl(data.cutoutPath, 3600);
+      if (signed.error || !signed.data?.signedUrl) throw signed.error ?? new Error('Kunde inte visa urklippet.');
+      if (run !== photoRun.current) return;
+
+      setCutoutPath(data.cutoutPath);
+      setCutoutUri(signed.data.signedUrl);
+      setCutoutStatus('done');
+    } catch (error) {
+      if (run !== photoRun.current) return;
+      console.warn('cutout-clothing failed', error);
+      // Not worth an alert: the user can still adjust and save the original photo.
+      setCutoutError(error instanceof Error ? error.message : String(error));
+      setCutoutStatus('failed');
+    }
+  };
+
+  const retryCutout = async () => {
+    if (!uploadedPath) return;
+    const run = photoRun.current;
+    setCutoutStatus('working');
+    setCutoutError(null);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const headers = sessionData.session?.access_token
+      ? { Authorization: `Bearer ${sessionData.session.access_token}` }
+      : undefined;
+    await cutOutGarment(uploadedPath, headers, run);
   };
 
   const saveItem = async () => {
@@ -159,19 +236,21 @@ export default function Add() {
     }
 
     setSaving(true);
+    let newPath: string | null = null;
     try {
-      let imagePath = uploadedPath;
+      let imagePath: string;
+      const adjusted = await editorRef.current?.capture().catch(() => null);
 
-      if (!imagePath) {
-        const response = await fetch(photoUri);
-        const imageData = await response.arrayBuffer();
-        imagePath = `${user.id}/${Date.now()}.jpg`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('wardrobe-images')
-          .upload(imagePath, imageData, { contentType: 'image/jpeg', upsert: false });
-
-        if (uploadError) throw uploadError;
+      if (adjusted) {
+        newPath = newImagePath(user.id, 'png');
+        await uploadFile(adjusted, newPath, 'image/png');
+        imagePath = newPath;
+      } else if (uploadedPath) {
+        imagePath = uploadedPath;
+      } else {
+        newPath = newImagePath(user.id, 'jpg');
+        await uploadFile(photoUri, newPath, 'image/jpeg');
+        imagePath = newPath;
       }
 
       const { error: insertError } = await supabase.from('clothing_items').insert({
@@ -187,17 +266,24 @@ export default function Add() {
       });
 
       if (insertError) {
-        if (!uploadedPath) {
-          await supabase.storage.from('wardrobe-images').remove([imagePath]);
+        if (newPath) {
+          await supabase.storage.from(BUCKET).remove([newPath]);
         }
         throw insertError;
       }
+
+      // The raw photo and the cut-out were only steps on the way to the saved image.
+      const leftovers = [uploadedPath, cutoutPath].filter((path): path is string => Boolean(path) && path !== imagePath);
+      if (leftovers.length) void supabase.storage.from(BUCKET).remove(leftovers);
 
       Alert.alert('Sparat', 'Plagget finns nu i din garderob.', [
         { text: 'OK', onPress: () => router.replace('/wardrobe') },
       ]);
       setPhotoUri(null);
       setUploadedPath(null);
+      setCutoutPath(null);
+      setCutoutUri(null);
+      setCutoutStatus('idle');
       setName('');
       setBrand('');
       setColor('');
@@ -211,11 +297,9 @@ export default function Add() {
     }
   };
 
-  const softCard = {
-    backgroundColor: colors.card,
-    shadowColor: colors.shadow,
-    ...Shadows.card,
-  };
+  const busy = saving || analyzing || cutoutStatus === 'working';
+  const editorUri = cutoutUri && !showOriginal ? cutoutUri : photoUri;
+  const inputStyle = [styles.input, { backgroundColor: colors.card, borderColor: colors.card, color: colors.text }];
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -223,6 +307,7 @@ export default function Add() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        scrollEnabled={scrollEnabled}
       >
         <View style={styles.container}>
           <View style={styles.header}>
@@ -232,30 +317,73 @@ export default function Add() {
 
           {photoUri ? (
             <>
-              <View style={[styles.previewWrap, softCard]}>
-                <Image
-                  source={{ uri: photoUri }}
-                  style={styles.preview}
-                  contentFit="cover"
-                />
-              </View>
+              <GarmentEditor
+                key={editorUri}
+                ref={editorRef}
+                uri={editorUri ?? photoUri}
+                onInteractionChange={(active) => setScrollEnabled(!active)}
+              />
 
-              <Pressable
-                style={[styles.buttonGhost, { borderColor: colors.border }]}
-                onPress={takePhoto}
-              >
-                <Text style={[styles.buttonGhostText, { color: colors.text }]}>
-                  Ta ny bild
-                </Text>
-              </Pressable>
+              <View style={styles.cutoutRow}>
+                {cutoutStatus === 'working' ? (
+                  <>
+                    <ActivityIndicator size="small" color={colors.accent} />
+                    <Text style={[styles.cutoutText, { color: colors.textMuted }]}>AI klipper ut plagget…</Text>
+                  </>
+                ) : cutoutStatus === 'done' ? (
+                  <>
+                    <Ionicons name="sparkles" size={14} color={colors.accent} />
+                    <Text style={[styles.cutoutText, { color: colors.text }]}>
+                      {showOriginal ? 'Originalbild' : 'Urklippt av AI'}
+                    </Text>
+                    <Pressable onPress={() => setShowOriginal((value) => !value)} hitSlop={8}>
+                      <Text style={[styles.cutoutToggle, { color: colors.accent }]}>
+                        {showOriginal ? 'Visa urklipp' : 'Visa original'}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : cutoutStatus === 'failed' ? (
+                  <>
+                    <Text style={[styles.cutoutText, { color: colors.textMuted }]}>
+                      {friendlyCutoutError(cutoutError)}
+                    </Text>
+                    {uploadedPath ? (
+                      <Pressable onPress={retryCutout} hitSlop={8}>
+                        <Text style={[styles.cutoutToggle, { color: colors.accent }]}>Försök igen</Text>
+                      </Pressable>
+                    ) : null}
+                  </>
+                ) : null}
+              </View>
+              <Text style={[styles.hint, { color: colors.textMuted }]}>
+                Dra för att flytta · nyp för storlek · vrid med två fingrar · dubbeltryck för att återställa
+              </Text>
+
+              <View style={styles.buttonRow}>
+                <Pressable
+                  style={[styles.buttonGhost, { backgroundColor: colors.card }]}
+                  onPress={takePhoto}
+                >
+                  <Ionicons name="camera-outline" size={16} color={colors.text} />
+                  <Text style={[styles.buttonGhostText, { color: colors.text }]}>Ny bild</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.buttonGhost, { backgroundColor: colors.card }]}
+                  onPress={() => editorRef.current?.reset()}
+                >
+                  <Ionicons name="refresh" size={16} color={colors.text} />
+                  <Text style={[styles.buttonGhostText, { color: colors.text }]}>Återställ</Text>
+                </Pressable>
+              </View>
 
               <TextInput
                 value={name}
                 onChangeText={setName}
                 placeholder="Namn på plagget"
                 placeholderTextColor={colors.textMuted}
-                style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                style={inputStyle}
               />
+              <Text style={[styles.label, { color: colors.textMuted }]}>Kategori</Text>
               <View style={styles.categories}>
                 {CLOTHING_CATEGORIES.map((value) => (
                   <Pressable
@@ -265,13 +393,13 @@ export default function Add() {
                       styles.categoryChip,
                       {
                         backgroundColor: category === value ? colors.primary : colors.card,
-                        borderColor: colors.border,
+                        borderColor: category === value ? colors.primary : colors.card,
                       },
                     ]}
                   >
                     <Text style={{
                       color: category === value ? colors.onPrimary : colors.text,
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: '600',
                     }}>
                       {value}
@@ -279,34 +407,40 @@ export default function Add() {
                   </Pressable>
                 ))}
               </View>
-              <TextInput value={brand} onChangeText={setBrand} placeholder="Märke (valfritt)" placeholderTextColor={colors.textMuted} style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]} />
-              <TextInput value={color} onChangeText={setColor} placeholder="Färg" placeholderTextColor={colors.textMuted} style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]} />
-              <TextInput value={pattern} onChangeText={setPattern} placeholder="Mönster, t.ex. enfärgad" placeholderTextColor={colors.textMuted} style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]} />
-              <TextInput value={material} onChangeText={setMaterial} placeholder="Material, t.ex. bomull" placeholderTextColor={colors.textMuted} style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]} />
-              <TextInput value={style} onChangeText={setStyle} placeholder="Stil, t.ex. casual" placeholderTextColor={colors.textMuted} style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]} />
+              <Text style={[styles.label, { color: colors.textMuted }]}>Detaljer</Text>
+              <TextInput value={brand} onChangeText={setBrand} placeholder="Märke (valfritt)" placeholderTextColor={colors.textMuted} style={inputStyle} />
+              <TextInput value={color} onChangeText={setColor} placeholder="Färg" placeholderTextColor={colors.textMuted} style={inputStyle} />
+              <TextInput value={pattern} onChangeText={setPattern} placeholder="Mönster, t.ex. enfärgad" placeholderTextColor={colors.textMuted} style={inputStyle} />
+              <TextInput value={material} onChangeText={setMaterial} placeholder="Material, t.ex. bomull" placeholderTextColor={colors.textMuted} style={inputStyle} />
+              <TextInput value={style} onChangeText={setStyle} placeholder="Stil, t.ex. casual" placeholderTextColor={colors.textMuted} style={inputStyle} />
               <Pressable
                 style={[
                   styles.button,
                   {
                     backgroundColor: colors.primary,
-                    opacity: saving || analyzing ? 0.6 : 1,
+                    opacity: busy ? 0.6 : 1,
                   },
                 ]}
                 onPress={saveItem}
-                disabled={saving || analyzing}
+                disabled={busy}
               >
                 <Text style={[styles.buttonText, { color: colors.onPrimary }]}>
-                  {analyzing ? 'AI läser plagget…' : saving ? 'Sparar…' : 'Spara i garderoben'}
+                  {saving
+                    ? 'Sparar…'
+                    : analyzing || cutoutStatus === 'working'
+                      ? 'AI läser plagget…'
+                      : 'Spara i garderoben'}
                 </Text>
               </Pressable>
             </>
           ) : (
-            <View style={[styles.emptyCard, softCard]}>
+            <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.accent }]}>
               <View style={[styles.cameraIcon, { backgroundColor: colors.accentSoft }]}>
                 <Ionicons name="camera-outline" size={28} color={colors.accent} />
               </View>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>Fotografera ett plagg</Text>
               <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-                Fotografera ett plagg mot en enkel bakgrund för bästa resultat.
+                Lägg plagget mot en enkel bakgrund så känner AI:n igen färg, material och stil.
               </Text>
               <Pressable
                 style={[styles.button, { backgroundColor: colors.primary, alignSelf: 'stretch' }]}
@@ -322,6 +456,42 @@ export default function Add() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+async function shrinkPhoto(uri: string, width: number) {
+  if (width <= MAX_UPLOAD_WIDTH) return uri;
+  const context = ImageManipulator.manipulate(uri);
+  context.resize({ width: MAX_UPLOAD_WIDTH });
+  const image = await context.renderAsync();
+  const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
+  return saved.uri;
+}
+
+/** Gemini's raw errors are long and technical; overload and quota get a short explanation instead. */
+function friendlyCutoutError(error: string | null) {
+  if (error && /high demand|503/i.test(error)) {
+    return 'AI:n är överbelastad just nu. Försök igen om en stund – du kan också spara bilden som den är.';
+  }
+  if (error && /quota|429/i.test(error)) {
+    return 'AI-kvoten är slut för tillfället. Du kan spara bilden som den är.';
+  }
+  return 'Kunde inte klippa ut plagget – du kan fortfarande justera och spara bilden.';
+}
+
+function newImagePath(userId: string, extension: 'jpg' | 'png') {
+  return `${userId}/${Date.now()}.${extension}`;
+}
+
+async function uploadFile(uri: string, path: string, contentType: string) {
+  const response = await fetch(uri);
+  const readType = response.headers.get('content-type') ?? '';
+  if (!response.ok || readType.includes('text/html')) {
+    throw new Error('Kunde inte läsa bilden från telefonen.');
+  }
+  const data = await response.arrayBuffer();
+  if (!data.byteLength) throw new Error('Bilden var tom.');
+  const { error } = await supabase.storage.from(BUCKET).upload(path, data, { contentType, upsert: false });
+  if (error) throw error;
 }
 
 async function functionErrorMessage(error: unknown) {
@@ -353,85 +523,120 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 110,
+    paddingBottom: 130,
   },
   container: {
     flex: 1,
-    padding: Spacing.lg,
-    gap: Spacing.md,
+    paddingHorizontal: 20,
+    paddingTop: Spacing.md,
+    gap: 12,
   },
   header: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   eyebrow: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 1.3,
-    textTransform: 'uppercase',
+    letterSpacing: 0,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '500',
-    marginTop: 4,
-    letterSpacing: -0.5,
+    ...displayTitle,
+    marginTop: 6,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 10,
   },
   emptyCard: {
-    marginTop: 24,
+    marginTop: 16,
+    minHeight: 380,
     borderRadius: Radius.xl,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
     padding: 28,
     alignItems: 'center',
-    gap: 16,
+    justifyContent: 'center',
+    gap: 14,
   },
   cameraIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    fontFamily: displayTitle.fontFamily,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: 280,
+    lineHeight: 21,
+    maxWidth: 270,
+    marginBottom: 8,
   },
-  previewWrap: {
-    borderRadius: Radius.xl,
-    overflow: 'hidden',
+  cutoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 20,
   },
-  preview: {
-    width: '100%',
-    height: 360,
+  cutoutText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  cutoutToggle: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  hint: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: -4,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
   button: {
     alignSelf: 'stretch',
-    paddingVertical: 16,
-    borderRadius: 16,
+    paddingVertical: 17,
+    borderRadius: Radius.full,
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 10,
   },
   buttonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
+    letterSpacing: 0.3,
   },
   buttonGhost: {
-    alignSelf: 'stretch',
-    paddingVertical: 14,
-    borderRadius: 16,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    paddingVertical: 13,
+    borderRadius: Radius.full,
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 0,
   },
   buttonGhostText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   input: {
     alignSelf: 'stretch',
-    height: 50,
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    fontSize: 14,
+    height: 54,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.lg,
+    paddingHorizontal: 18,
+    fontSize: 15,
   },
   categories: {
     alignSelf: 'stretch',
@@ -440,8 +645,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryChip: {
-    height: 36,
-    borderRadius: 12,
+    height: 38,
+    borderRadius: Radius.full,
     borderWidth: 1,
     paddingHorizontal: 14,
     alignItems: 'center',

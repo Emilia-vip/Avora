@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Radius, Shadows, Spacing } from '@/constants/theme';
+import { cardSurface, displayTitle, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { CLOTHING_CATEGORIES, matchesCategoryFilter } from '@/lib/clothing-category';
@@ -22,6 +22,7 @@ type ClothingItem = {
   material: string | null;
   style: string | null;
   image: string | null;
+  image_path?: string | null;
   favorite: boolean;
 };
 
@@ -37,6 +38,7 @@ export default function Wardrobe() {
   const [category, setCategory] = useState('Alla');
   const [favorites, setFavorites] = useState(new Set<string>());
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(true);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -113,8 +115,8 @@ export default function Wardrobe() {
     const matchesQuery = `${item.name} ${item.brand} ${item.color} ${item.pattern} ${item.material} ${item.style}`
       .toLowerCase()
       .includes(query.toLowerCase());
-    return matchesCategory && matchesQuery;
-  }), [category, items, query]);
+    return matchesCategory && matchesQuery && (!favoritesOnly || favorites.has(item.id));
+  }), [category, items, query, favoritesOnly, favorites]);
 
   const toggleFavorite = async (id: string) => {
     const favorite = !favorites.has(id);
@@ -143,11 +145,50 @@ export default function Wardrobe() {
     }
   };
 
-  const softCard = {
-    backgroundColor: colors.card,
-    shadowColor: colors.shadow,
-    ...Shadows.card,
+  const deleteItem = (item: ClothingItem) => {
+    if (!cloudSyncEnabled) {
+      Alert.alert('Cloud Sync är pausad', 'Slå på Cloud Sync för att kunna ta bort plagg.');
+      return;
+    }
+
+    Alert.alert('Ta bort plagg?', `"${item.name}" tas bort från garderoben. Det går inte att ångra.`, [
+      { text: 'Avbryt', style: 'cancel' },
+      {
+        text: 'Ta bort',
+        style: 'destructive',
+        onPress: async () => {
+          const previous = items;
+          const nextItems = items.filter((entry) => entry.id !== item.id);
+          setItems(nextItems);
+          setFavorites((current) => {
+            const next = new Set(current);
+            next.delete(item.id);
+            return next;
+          });
+
+          const { data, error } = await supabase
+            .from('clothing_items')
+            .delete()
+            .eq('id', item.id)
+            .eq('user_id', user?.id)
+            .select('id');
+          // Without a delete policy Supabase reports success but removes nothing.
+          if (error || !data?.length) {
+            setItems(previous);
+            setFavorites(new Set(previous.filter((entry) => entry.favorite).map((entry) => entry.id)));
+            Alert.alert('Kunde inte ta bort plagget', error?.message ?? 'Databasen tillät inte borttagningen.');
+            return;
+          }
+
+          // The row is gone; a leftover image is harmless, so storage cleanup is best-effort.
+          if (item.image_path) void supabase.storage.from('wardrobe-images').remove([item.image_path]);
+          await saveWardrobeCache(nextItems);
+        },
+      },
+    ]);
   };
+
+  const softCard = cardSurface(colors);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -157,15 +198,27 @@ export default function Wardrobe() {
             <Text style={[styles.eyebrow, { color: colors.accent }]}>Din kollektion</Text>
             <Text style={[styles.title, { color: colors.text }]}>Garderob</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-              {loading ? 'Laddar…' : `${items.length} plagg`}
+              {loading ? 'Laddar…' : favoritesOnly ? `${filteredItems.length} favoriter` : `${items.length} plagg`}
             </Text>
           </View>
-          <Pressable style={[styles.iconButton, softCard]}>
-            <Ionicons name="options-outline" size={18} color={colors.text} />
+          <Pressable
+            onPress={() => setFavoritesOnly((value) => !value)}
+            accessibilityRole="button"
+            accessibilityLabel={favoritesOnly ? 'Visa alla plagg' : 'Visa bara favoriter'}
+            style={[
+              styles.iconButton,
+              softCard,
+              favoritesOnly && { backgroundColor: colors.primary, borderColor: colors.primary },
+            ]}>
+            <Ionicons
+              name={favoritesOnly ? 'heart' : 'heart-outline'}
+              size={18}
+              color={favoritesOnly ? colors.onPrimary : colors.text}
+            />
           </Pressable>
         </View>
 
-        <View style={[styles.search, softCard]}>
+        <View style={[styles.search, { backgroundColor: colors.card }]}>
           <Ionicons name="search-outline" size={17} color={colors.textMuted} />
           <TextInput
             value={query}
@@ -186,12 +239,12 @@ export default function Wardrobe() {
                 style={[
                   styles.category,
                   active
-                    ? { backgroundColor: colors.primary }
-                    : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 },
+                    ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                    : { backgroundColor: colors.card, borderColor: colors.card },
                 ]}>
                 <Text style={{
-                  color: active ? colors.onPrimary : colors.textMuted,
-                  fontSize: 12,
+                  color: active ? colors.onPrimary : colors.text,
+                  fontSize: 13,
                   fontWeight: '600',
                 }}>
                   {value}
@@ -212,12 +265,14 @@ export default function Wardrobe() {
             <Text style={{ color: colors.textMuted, width: '100%' }}>
               {items.length === 0
                 ? 'Inga plagg sparade ännu.'
-                : 'Inga plagg matchar sökningen.'}
+                : favoritesOnly && favorites.size === 0
+                  ? 'Du har inga favoriter än – tryck på hjärtat på ett plagg.'
+                  : 'Inga plagg matchar sökningen.'}
             </Text>
           )}
           {filteredItems.map((item) => (
             <View key={item.id} style={styles.item}>
-              <View style={[styles.imageWrap, softCard]}>
+              <View style={[styles.imageWrap, { backgroundColor: colors.garmentTile }]}>
                 {item.image ? (
                   <Image source={{ uri: item.image }} style={styles.image} />
                 ) : (
@@ -226,7 +281,16 @@ export default function Wardrobe() {
                   </View>
                 )}
                 <Pressable
+                  onPress={() => deleteItem(item)}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ta bort ${item.name}`}
+                  style={[styles.trash, { backgroundColor: colors.card }]}>
+                  <Ionicons name="trash-outline" size={14} color={colors.danger} />
+                </Pressable>
+                <Pressable
                   onPress={() => toggleFavorite(item.id)}
+                  hitSlop={6}
                   style={[styles.heart, { backgroundColor: colors.card }]}>
                   <Ionicons
                     name={favorites.has(item.id) ? 'heart' : 'heart-outline'}
@@ -251,7 +315,7 @@ export default function Wardrobe() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  content: { padding: Spacing.lg, paddingBottom: 110 },
+  content: { padding: Spacing.lg, paddingBottom: 130 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -259,16 +323,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   eyebrow: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 1.3,
-    textTransform: 'uppercase',
+    letterSpacing: 0,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '500',
-    marginTop: 4,
-    letterSpacing: -0.5,
+    ...displayTitle,
+    marginTop: 6,
   },
   subtitle: {
     fontSize: 13,
@@ -277,13 +338,13 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 42,
     height: 42,
-    borderRadius: 14,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
   search: {
     height: 50,
-    borderRadius: 16,
+    borderRadius: Radius.full,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -298,8 +359,9 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   category: {
-    height: 36,
-    borderRadius: 18,
+    height: 38,
+    borderRadius: Radius.full,
+    borderWidth: 1,
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -307,14 +369,15 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 14,
+    columnGap: 12,
+    rowGap: 22,
   },
   item: {
-    width: '47.5%',
+    width: '48%',
   },
   imageWrap: {
     aspectRatio: 3 / 4,
-    borderRadius: 18,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -327,25 +390,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  trash: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   heart: {
     position: 'absolute',
     top: 10,
     right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   itemName: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     marginTop: 10,
     letterSpacing: -0.1,
   },
   itemMeta: {
     fontSize: 11,
     marginTop: 3,
+    textTransform: 'capitalize',
   },
   error: {
     fontSize: 12,

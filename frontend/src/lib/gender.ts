@@ -10,10 +10,9 @@ export function normalizeGender(value?: string | null): GenderValue | null {
   if (!value) return null;
   const raw = value.trim().toLowerCase();
   if (!raw) return null;
-  if (/(female|kvinna|woman|f|w)/.test(raw) || raw === 'kvinna') return 'female';
-  if (/(male|man|boy|m)/.test(raw) && !/female|woman/.test(raw)) return 'male';
-  if (/(other|annat|non.?binary|nb|x)/.test(raw)) return 'other';
-  if (raw === 'female' || raw === 'male' || raw === 'other') return raw;
+  if (['female', 'kvinna', 'woman', 'f', 'w'].includes(raw)) return 'female';
+  if (['male', 'man', 'boy', 'm'].includes(raw)) return 'male';
+  if (/^(other|annat|non.?binary|nb|x)/.test(raw)) return 'other';
   return null;
 }
 

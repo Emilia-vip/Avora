@@ -1,3 +1,5 @@
+import * as Location from 'expo-location';
+
 export type WeatherSnapshot = {
   temperatureC: number;
   highC: number;
@@ -26,24 +28,22 @@ export async function loadCurrentWeather(): Promise<WeatherSnapshot> {
   return fetchWeather(coords.latitude, coords.longitude);
 }
 
-function getCoordinates() {
-  return new Promise<{ latitude: number; longitude: number }>((resolve) => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      resolve(STOCKHOLM);
-      return;
-    }
+async function getCoordinates() {
+  try {
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status !== 'granted') return STOCKHOLM;
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-      },
-      () => resolve(STOCKHOLM),
-      { timeout: 4000, maximumAge: 30 * 60 * 1000 },
-    );
-  });
+    // A recent cached position is instant; otherwise ask for a fresh one but don't wait forever.
+    const cached = await Location.getLastKnownPositionAsync({ maxAge: 30 * 60 * 1000 });
+    const position = cached ?? await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+    ]);
+    if (!position) return STOCKHOLM;
+    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+  } catch {
+    return STOCKHOLM;
+  }
 }
 
 async function fetchWeather(latitude: number, longitude: number): Promise<WeatherSnapshot> {

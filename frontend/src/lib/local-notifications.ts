@@ -6,7 +6,8 @@ export async function setDailyAiNotificationEnabled(enabled: boolean) {
   // Ensure handler is consistent across app restarts.
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: false,
       shouldSetBadge: false,
     }),
@@ -38,9 +39,9 @@ export async function setDailyAiNotificationEnabled(enabled: boolean) {
       data: { kind: DAILY_AI_KIND },
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour: 19,
       minute: 0,
-      repeats: true,
     },
   });
 }

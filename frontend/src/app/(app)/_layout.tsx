@@ -1,45 +1,50 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { Platform, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TabIconButton } from '@/components/navigation/tab-icon-button';
 import { TabPlusButton } from '@/components/navigation/tab-plus-button';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 export default function TabLayout() {
   const colors = useAppTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarShowLabel: false,
+        tabBarActiveTintColor: colors.tabActive,
+        tabBarInactiveTintColor: colors.tabInactive,
+        // Floating pill that hovers above the content instead of a full-width bar.
         tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.border,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          height: Platform.OS === 'ios' ? 84 : 68,
-          paddingTop: 10,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 1,
-          shadowRadius: 12,
-          elevation: 8,
+          position: 'absolute',
+          bottom: Math.max(insets.bottom, 12),
+          marginHorizontal: 20,
+          height: 64,
+          paddingTop: 0,
+          paddingBottom: 0,
+          borderRadius: 32,
+          borderTopWidth: 0,
+          backgroundColor: colors.tabBar,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.18,
+          shadowRadius: 24,
+          elevation: 10,
         },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '600',
-          letterSpacing: 0.2,
-          marginTop: 2,
+        tabBarItemStyle: {
+          height: 64,
         },
+        tabBarButton: (props) => <TabIconButton {...props} />,
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Hem',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -49,7 +54,7 @@ export default function TabLayout() {
         options={{
           title: 'Garderob',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'shirt' : 'shirt-outline'} size={size} color={color} />
+            <Ionicons name={focused ? 'shirt' : 'shirt-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -68,7 +73,7 @@ export default function TabLayout() {
         options={{
           title: 'Looks',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={size} color={color} />
+            <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -78,7 +83,7 @@ export default function TabLayout() {
         options={{
           title: 'Profil',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
           ),
         }}
       />

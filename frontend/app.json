@@ -4,24 +4,22 @@
     "slug": "Avora",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/Avora logga.jpg",
+    "icon": "./assets/images/icon.png",
     "scheme": "avora",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/Avora logga.jpg"
+      "icon": "./assets/images/icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/Avora logga.jpg",
-        "backgroundImage": "./assets/images/Avora logga.jpg",
-        "monochromeImage": "./assets/images/Avora logga.jpg"
+        "backgroundColor": "#F7F4F0",
+        "foregroundImage": "./assets/images/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/Avora logga.jpg"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
   "expo-router",
@@ -32,7 +30,7 @@
   [
     "expo-splash-screen",
     {
-      "backgroundColor": "#208AEF",
+      "backgroundColor": "#F7F4F0",
         "ios": {
           "image": "./assets/images/Avora logga.jpg",
         "imageWidth": 280,
@@ -46,6 +44,12 @@
     }
   ],
   "expo-secure-store",
+  [
+    "expo-location",
+    {
+      "locationWhenInUsePermission": "Avora använder din plats för att anpassa looks efter vädret."
+    }
+  ],
   [
     "expo-image-picker",
     {

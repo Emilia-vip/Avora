@@ -282,6 +282,6 @@ function explainOutfit(
   return `${names} funkar ${vibe}${colors ? `, med ${colors}` : ''}.${weatherBit}`;
 }
 
-function compact(items: Array<WardrobeItem | undefined>) {
+function compact(items: (WardrobeItem | undefined)[]) {
   return items.filter((item): item is WardrobeItem => Boolean(item));
 }

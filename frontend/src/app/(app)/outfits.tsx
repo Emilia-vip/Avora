@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Radius, Shadows, Spacing } from '@/constants/theme';
+import { cardSurface, displayTitle, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { genderFromUser } from '@/lib/gender';
@@ -86,11 +86,7 @@ export default function Outfits() {
     return suggestions;
   }, [wardrobeItems, weather, gender]);
 
-  const softCard = {
-    backgroundColor: colors.card,
-    shadowColor: colors.shadow,
-    ...Shadows.card,
-  };
+  const softCard = cardSurface(colors);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -123,11 +119,10 @@ export default function Outfits() {
           <View key={outfit.title} style={[styles.card, softCard]}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={[styles.outfitName, { color: colors.text }]}>{outfit.title}</Text>
-                <Text style={[styles.detail, { color: colors.textMuted }]}>{outfit.reason}</Text>
+                <Text style={[styles.outfitName, { color: colors.text }]} numberOfLines={2}>{outfit.title}</Text>
               </View>
               <View style={[styles.match, { backgroundColor: colors.accentSoft }]}>
-                <Ionicons name="star" size={10} color={colors.accent} />
+                <Ionicons name="sparkles" size={10} color={colors.accent} />
                 <Text style={[styles.matchText, { color: colors.accent }]}>
                   {outfit.matchPercent}%
                 </Text>
@@ -135,9 +130,11 @@ export default function Outfits() {
             </View>
             <View style={styles.images}>
               {outfit.items.map((item) => (
-                item.image
-                  ? <Image key={item.id} source={{ uri: item.image }} style={[styles.image, { backgroundColor: colors.input }]} />
-                  : <View key={item.id} style={[styles.image, { backgroundColor: colors.input }]} />
+                <View key={item.id} style={styles.piece}>
+                  {item.image
+                    ? <Image source={{ uri: item.image }} style={[styles.image, { backgroundColor: colors.garmentTile }]} />
+                    : <View style={[styles.image, { backgroundColor: colors.input }]} />}
+                </View>
               ))}
             </View>
           </View>
@@ -149,7 +146,7 @@ export default function Outfits() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  content: { padding: Spacing.lg, paddingBottom: 110 },
+  content: { paddingHorizontal: 20, paddingTop: Spacing.md, paddingBottom: 130 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -157,75 +154,75 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   eyebrow: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 1.3,
-    textTransform: 'uppercase',
+    letterSpacing: 0,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '500',
-    marginTop: 4,
-    letterSpacing: -0.5,
+    ...displayTitle,
+    marginTop: 6,
   },
   subtitle: {
     fontSize: 13,
-    marginTop: 4,
+    marginTop: 6,
     maxWidth: 240,
   },
   iconButton: {
     width: 42,
     height: 42,
-    borderRadius: 14,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontFamily: Fonts.display,
+    fontSize: 22,
+    fontWeight: '800',
     marginBottom: 14,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   card: {
     borderRadius: Radius.xl,
     padding: 18,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 16,
+    paddingHorizontal: 2,
   },
   outfitName: {
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-  },
-  detail: {
-    fontSize: 12,
-    marginTop: 6,
-    lineHeight: 17,
+    fontFamily: Fonts.display,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    textTransform: 'capitalize',
   },
   match: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: 12,
+    borderRadius: Radius.full,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
   matchText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   images: {
     flexDirection: 'row',
     gap: 8,
   },
-  image: {
+  piece: {
     flex: 1,
-    height: 150,
-    borderRadius: 14,
+    minWidth: 0,
+  },
+  image: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    borderRadius: Radius.lg,
   },
 });

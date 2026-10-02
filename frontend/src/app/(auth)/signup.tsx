@@ -127,15 +127,15 @@ function Signup() {
                 style={({ pressed }) => [
                   styles.chip,
                   {
-                    borderColor: selected ? colors.accent : colors.border,
-                    backgroundColor: selected ? `${colors.accent}22` : 'transparent',
+                    borderColor: selected ? colors.primary : colors.input,
+                    backgroundColor: selected ? colors.primary : colors.input,
                     opacity: pressed ? 0.85 : 1,
                   },
                 ]}>
                 <Text
                   style={[
                     styles.chipText,
-                    { color: selected ? colors.accent : colors.text },
+                    { color: selected ? colors.onPrimary : colors.text },
                   ]}>
                   {option.label}
                 </Text>
@@ -161,8 +161,8 @@ function Signup() {
                 style={({ pressed }) => [
                   styles.chip,
                   {
-                    borderColor: selected ? colors.accent : colors.border,
-                    backgroundColor: selected ? `${colors.accent}22` : 'transparent',
+                    borderColor: selected ? colors.primary : colors.input,
+                    backgroundColor: selected ? colors.primary : colors.input,
                     opacity: pressed ? 0.85 : 1,
                   },
                 ]}
@@ -170,7 +170,7 @@ function Signup() {
                 <Text
                   style={[
                     styles.chipText,
-                    { color: selected ? colors.accent : colors.text },
+                    { color: selected ? colors.onPrimary : colors.text },
                   ]}
                 >
                   {option}

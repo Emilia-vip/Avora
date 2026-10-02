@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Colors, Radius, Shadows, Spacing } from '@/constants/theme';
+import { Colors, displayTitle, Fonts, Radius, Shadows, Spacing } from '@/constants/theme';
 
 type AuthScreenProps = {
   title: string;
@@ -33,10 +33,10 @@ export function AuthScreen({ title, subtitle, children, footer }: AuthScreenProp
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <View style={[styles.logo, { backgroundColor: colors.accent }]}>
-              <Text style={[styles.logoText, { color: colors.accentText }]}>A</Text>
+            <View style={[styles.logo, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.logoText, { color: colors.onPrimary }]}>A</Text>
             </View>
-            <Text style={[styles.brand, { color: colors.accent }]}>Avora</Text>
+            <Text style={[styles.brand, { color: colors.text }]}>avora<Text style={{ color: colors.accent }}>.</Text></Text>
             <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>{subtitle}</Text>
           </View>
@@ -46,6 +46,7 @@ export function AuthScreen({ title, subtitle, children, footer }: AuthScreenProp
               styles.card,
               {
                 backgroundColor: colors.card,
+                borderColor: colors.card,
                 shadowColor: colors.shadow,
                 ...Shadows.soft,
               },
@@ -78,29 +79,28 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   logo: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+    width: 68,
+    height: 68,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.xs,
   },
   logoText: {
-    fontSize: 26,
-    fontWeight: '600',
+    fontFamily: Fonts.display,
+    fontSize: 32,
+    fontWeight: '800',
     letterSpacing: -0.5,
   },
   brand: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '500',
+    ...displayTitle,
     marginTop: Spacing.sm,
-    letterSpacing: -0.5,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 15,
@@ -110,6 +110,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: Radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: Spacing.lg,
     gap: Spacing.md,
   },

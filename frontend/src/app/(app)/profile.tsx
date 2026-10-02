@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Radius, Spacing } from '@/constants/theme';
+import { cardSurface, displayTitle, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { setDailyAiNotificationEnabled } from '@/lib/local-notifications';
@@ -55,7 +55,7 @@ export default function Profile() {
     cloudSyncEnabled: true,
   });
 
-  const [stats, setStats] = useState<Array<{ label: string; value: string }>>([
+  const [stats, setStats] = useState<{ label: string; value: string }[]>([
     { label: 'Items', value: '0' },
     { label: 'Outfits', value: '0' },
     { label: 'Brands', value: '0' },
@@ -65,17 +65,15 @@ export default function Profile() {
   const [isEditingStyleDna, setIsEditingStyleDna] = useState(false);
   const [styleDnaDraft, setStyleDnaDraft] = useState<string[]>([]);
   const [styleDnaSaving, setStyleDnaSaving] = useState(false);
-  const [gender, setGender] = useState<GenderValue | null>(null);
+  // Holds an optimistic choice while saving; otherwise the saved value on the user wins.
+  const [pendingGender, setGender] = useState<GenderValue | null | undefined>(undefined);
+  const gender = pendingGender !== undefined ? pendingGender : genderFromUser(user);
   const [genderSaving, setGenderSaving] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [planLabel, setPlanLabel] = useState('Member');
 
   const scrollRef = useRef<ScrollView>(null);
-
-  useEffect(() => {
-    setGender(genderFromUser(user));
-  }, [user]);
 
   useEffect(() => {
     let active = true;
@@ -134,7 +132,7 @@ export default function Profile() {
           { label: 'Brands', value: String(brandsCount) },
         ]);
 
-        const toCountMap = (values: Array<string | null | undefined>) => {
+        const toCountMap = (values: (string | null | undefined)[]) => {
           const map = new Map<string, number>();
           for (const v of values) {
             const s = (v ?? '').trim();
@@ -363,14 +361,7 @@ export default function Profile() {
     }
   };
 
-  const softCard = {
-    backgroundColor: colors.card,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 14,
-    elevation: 2,
-  };
+  const softCard = cardSurface(colors);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -394,7 +385,7 @@ export default function Profile() {
           </Pressable>
         </View>
 
-        <View style={[styles.heroCard, softCard]}>
+        <View style={[styles.heroCard, { backgroundColor: colors.hero }]}>
           <View style={styles.profileRow}>
             <Pressable
               onPress={pickAvatarFromLibrary}
@@ -402,12 +393,12 @@ export default function Profile() {
               style={styles.avatarOuter}
               accessibilityRole="button"
               accessibilityLabel="Byt profilbild">
-              <View style={[styles.avatarWrap, { backgroundColor: colors.input }]}>
+              <View style={[styles.avatarWrap, { backgroundColor: colors.heroOverlay }]}>
                 {avatarUri ? (
                   <Image source={{ uri: avatarUri }} style={styles.avatar} />
                 ) : (
-                  <View style={[styles.avatarFallback, { backgroundColor: colors.input }]}>
-                    <Text style={[styles.avatarFallbackText, { color: colors.text }]}>
+                  <View style={[styles.avatarFallback, { backgroundColor: colors.accentSoft }]}>
+                    <Text style={[styles.avatarFallbackText, { color: colors.accent }]}>
                       {displayName.charAt(0).toUpperCase()}
                     </Text>
                   </View>
@@ -418,19 +409,19 @@ export default function Profile() {
                   </View>
                 ) : null}
               </View>
-              <View style={[styles.avatarBadge, { backgroundColor: colors.accent }]}>
+              <View style={[styles.avatarBadge, { backgroundColor: colors.accent, borderColor: colors.hero }]}>
                 <Ionicons name="camera" size={11} color={colors.accentText} />
               </View>
             </Pressable>
 
             <View style={styles.nameBlock}>
-              <Text style={[styles.name, { color: colors.text }]}>{displayName}</Text>
-              <Text style={[styles.email, { color: colors.textMuted }]}>{email}</Text>
-              <View style={[styles.planPill, { backgroundColor: colors.input }]}>
-                <View style={[styles.planDot, { backgroundColor: colors.accent }]} />
-                <Text style={[styles.planText, { color: colors.text }]}>{planLabel}</Text>
+              <Text style={[styles.name, { color: colors.onHero }]}>{displayName}</Text>
+              <Text style={[styles.email, { color: colors.onHeroMuted }]}>{email}</Text>
+              <View style={[styles.planPill, { backgroundColor: colors.heroOverlay }]}>
+                <View style={[styles.planDot, { backgroundColor: colors.heroAccent }]} />
+                <Text style={[styles.planText, { color: colors.onHero }]}>{planLabel}</Text>
               </View>
-              <Text style={[styles.genderMeta, { color: colors.textMuted }]}>
+              <Text style={[styles.genderMeta, { color: colors.onHeroMuted }]}>
                 {genderLabel(gender)}
               </Text>
             </View>
@@ -440,7 +431,7 @@ export default function Profile() {
         <View style={styles.statsRow}>
           {stats.map((stat) => (
             <View key={stat.label} style={[styles.statCard, softCard]}>
-              <View style={[styles.statIconWrap, { backgroundColor: colors.input }]}>
+              <View style={[styles.statIconWrap, { backgroundColor: colors.accentSoft }]}>
                 <Ionicons
                   name={STAT_ICONS[stat.label as keyof typeof STAT_ICONS] ?? 'ellipse-outline'}
                   size={14}
@@ -470,8 +461,8 @@ export default function Profile() {
                   style={[
                     styles.tag,
                     selected
-                      ? { backgroundColor: colors.primary }
-                      : { backgroundColor: colors.input },
+                      ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                      : { backgroundColor: colors.card, borderColor: colors.card },
                     genderSaving ? { opacity: 0.7 } : null,
                   ]}>
                   <Text
@@ -529,8 +520,8 @@ export default function Profile() {
                       style={[
                         styles.tag,
                         selected
-                          ? { backgroundColor: colors.primary }
-                          : { backgroundColor: colors.input },
+                          ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                          : { backgroundColor: colors.card, borderColor: colors.card },
                       ]}>
                       <Text
                         style={[
@@ -576,7 +567,7 @@ export default function Profile() {
           ) : styleTags.length > 0 ? (
             <View style={styles.tagWrap}>
               {styleTags.map((tag) => (
-                <View key={tag} style={[styles.tag, { backgroundColor: colors.input }]}>
+                <View key={tag} style={[styles.tag, { backgroundColor: colors.accentSoft, borderColor: colors.accentSoft }]}>
                   <Text style={[styles.tagText, { color: colors.text }]}>{tag}</Text>
                 </View>
               ))}
@@ -603,7 +594,7 @@ export default function Profile() {
                     borderBottomColor: colors.border,
                   },
                 ]}>
-                <View style={[styles.settingIcon, { backgroundColor: colors.input }]}>
+                <View style={[styles.settingIcon, { backgroundColor: colors.accentSoft }]}>
                   <Ionicons name={item.icon} size={16} color={colors.accent} />
                 </View>
                 <View style={styles.settingCopy}>
@@ -628,8 +619,8 @@ export default function Profile() {
             softCard,
             { backgroundColor: pressed ? colors.input : colors.card },
           ]}>
-          <Ionicons name="log-out-outline" size={16} color={colors.textMuted} />
-          <Text style={[styles.logoutText, { color: colors.textMuted }]}>Logga ut</Text>
+          <Ionicons name="log-out-outline" size={16} color={colors.danger} />
+          <Text style={[styles.logoutText, { color: colors.danger }]}>Logga ut</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -643,7 +634,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 22,
     paddingTop: 8,
-    paddingBottom: 120,
+    paddingBottom: 130,
     gap: 18,
   },
   headerRow: {
@@ -652,27 +643,24 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   eyebrow: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    letterSpacing: 0,
   },
   pageTitle: {
-    fontSize: 28,
-    fontWeight: '500',
-    marginTop: 4,
-    letterSpacing: -0.5,
+    ...displayTitle,
+    marginTop: 6,
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
   heroCard: {
     borderRadius: Radius.xl,
-    padding: 18,
+    padding: 22,
   },
   profileRow: {
     flexDirection: 'row',
@@ -686,7 +674,7 @@ const styles = StyleSheet.create({
   avatarWrap: {
     width: 84,
     height: 84,
-    borderRadius: 26,
+    borderRadius: 42,
     overflow: 'hidden',
   },
   avatar: {
@@ -699,23 +687,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarFallbackText: {
-    fontSize: 30,
-    fontWeight: '600',
+    fontFamily: Fonts.display,
+    fontSize: 34,
+    fontWeight: '800',
     letterSpacing: -0.5,
   },
   avatarOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(44, 36, 38, 0.45)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarBadge: {
     position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 26,
-    height: 26,
-    borderRadius: 10,
+    right: 0,
+    bottom: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -724,9 +714,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   name: {
-    fontSize: 22,
-    fontWeight: '500',
-    letterSpacing: -0.3,
+    fontFamily: Fonts.display,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.7,
   },
   email: {
     fontSize: 13,
@@ -760,24 +751,25 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    borderRadius: 22,
+    borderRadius: Radius.lg,
     paddingVertical: 14,
     paddingHorizontal: 10,
     alignItems: 'center',
     gap: 4,
   },
   statIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
   },
   statValue: {
-    fontSize: 22,
-    fontWeight: '600',
-    letterSpacing: -0.4,
+    fontFamily: Fonts.display,
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.8,
   },
   statLabel: {
     fontSize: 11,
@@ -785,23 +777,23 @@ const styles = StyleSheet.create({
   },
   styleCard: {
     borderRadius: Radius.xl,
-    padding: 18,
+    padding: 20,
     gap: 14,
   },
   section: {
     gap: 2,
   },
   sectionKicker: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    letterSpacing: 0,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '500',
-    marginTop: 2,
-    letterSpacing: -0.2,
+    fontFamily: Fonts.display,
+    fontSize: 22,
+    fontWeight: '800',
+    marginTop: 4,
+    letterSpacing: -0.6,
   },
   styleHint: {
     fontSize: 13,
@@ -814,6 +806,7 @@ const styles = StyleSheet.create({
   },
   tag: {
     borderRadius: Radius.full,
+    borderWidth: 1,
     paddingHorizontal: 13,
     paddingVertical: 8,
   },
@@ -830,7 +823,7 @@ const styles = StyleSheet.create({
   styleDnaEditButton: {
     width: 34,
     height: 34,
-    borderRadius: 12,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -842,7 +835,7 @@ const styles = StyleSheet.create({
   styleDnaCancel: {
     flex: 1,
     minHeight: 48,
-    borderRadius: 16,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -853,7 +846,7 @@ const styles = StyleSheet.create({
   styleDnaSave: {
     flex: 1,
     minHeight: 48,
-    borderRadius: 16,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -862,7 +855,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   settingsCard: {
-    borderRadius: 24,
+    borderRadius: Radius.xl,
     overflow: 'hidden',
   },
   settingRow: {
@@ -875,7 +868,7 @@ const styles = StyleSheet.create({
   settingIcon: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -901,7 +894,7 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     marginTop: 4,
-    borderRadius: 18,
+    borderRadius: Radius.full,
     minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',

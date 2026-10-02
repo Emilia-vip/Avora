@@ -9,7 +9,7 @@ export function WeatherHeroCard({ weather }: { weather: WeatherSnapshot | null }
 
   return (
     <View style={styles.tile}>
-      <Ionicons name={weather?.icon ?? 'partly-sunny'} size={16} color={colors.text} />
+      <Ionicons name={weather?.icon ?? 'partly-sunny'} size={18} color={colors.accent} />
       <Text style={[styles.temp, { color: colors.text }]}>
         {weather ? `${weather.temperatureC}°` : '—'}
       </Text>
@@ -19,15 +19,13 @@ export function WeatherHeroCard({ weather }: { weather: WeatherSnapshot | null }
 
 const styles = StyleSheet.create({
   tile: {
-    width: 48,
-    height: 48,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
+    gap: 6,
   },
   temp: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '700',
     letterSpacing: -0.3,
   },
 });

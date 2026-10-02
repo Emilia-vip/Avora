@@ -43,14 +43,15 @@ export function AuthButton({ title, onPress, variant = 'primary', style }: AuthB
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: Radius.md,
-    paddingVertical: 15,
+    borderRadius: Radius.full,
+    paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: Spacing.xs,
   },
   text: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
+    letterSpacing: 0,
   },
 });
