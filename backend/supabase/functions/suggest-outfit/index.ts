@@ -6,9 +6,8 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const geminiModels = [
   Deno.env.get("GEMINI_MODEL"),
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-flash",
   "gemini-3.1-flash-lite",
+  "gemini-3.6-flash",
   "gemini-flash-latest",
 ].filter((model, index, list): model is string => Boolean(model) && list.indexOf(model) === index);
 
