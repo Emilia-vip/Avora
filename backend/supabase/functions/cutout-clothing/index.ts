@@ -27,16 +27,17 @@ type Segment = { box_2d: number[]; mask: unknown; label?: string };
 
 serve(handle("cutout-clothing", async (request) => {
   requireGeminiKey();
-  const body = await readJson<{ storagePath?: string; bucket?: string }>(request);
-  const bucket = body.bucket ?? "wardrobe-images";
+  const body = await readJson<{ storagePath?: string }>(request);
+  // Fixed bucket: the service-role client must never read a bucket the app picks.
+  const bucket = "wardrobe-images";
   const storagePath = body.storagePath?.trim();
-  if (!storagePath) throw new PublicError("storagePath saknas.");
+  if (!storagePath) throw new PublicError("storagePath is missing.");
 
   const { supabase, user } = await requireUser(request);
   assertOwnPath(storagePath, user);
 
   const { data: file, error: downloadError } = await supabase.storage.from(bucket).download(storagePath);
-  if (downloadError || !file) throw downloadError ?? new Error("Kunde inte läsa bilden.");
+  if (downloadError || !file) throw downloadError ?? new Error("Could not read the image.");
 
   await consumeDailyQuota(supabase, user.id, "cutout-clothing");
 
@@ -58,7 +59,7 @@ serve(handle("cutout-clothing", async (request) => {
   }
 
   const segment = await segmentGarment(bytes, file.type || "image/jpeg");
-  if (!segment) throw new PublicError("AI:n hittade inget plagg i bilden.", 422);
+  if (!segment) throw new PublicError("The AI couldn't find a garment in the photo.", 422);
 
   const photo = await Image.decode(bytes);
   const cutout = await cutOut(photo, segment);
@@ -188,7 +189,7 @@ async function cutOut(photo: Image, segment: Segment) {
     alpha = await maskFromPng(segment.mask, box, crop);
   } else {
     const rings = toRings(segment.mask);
-    if (!rings.length) throw new Error("AI:n gav ingen giltig kontur.");
+    if (!rings.length) throw new Error("The AI returned no valid outline.");
     alpha = rasterize(rings.map((ring) => ring.map((p) => toPixel(p, rings, segment.box_2d, box, W, H))), crop);
   }
 
@@ -211,7 +212,7 @@ async function cutOut(photo: Image, segment: Segment) {
 /** Older Gemini models return a base64 PNG probability map sized to the bounding box. */
 async function maskFromPng(dataUrl: string, box: { x0: number; y0: number; x1: number; y1: number }, crop: Crop) {
   const mask = await decodeMask(dataUrl);
-  if (!mask) throw new Error("AI:n gav en mask som inte gick att läsa.");
+  if (!mask) throw new Error("The AI returned an unreadable mask.");
   return alphaFromBoxMask(mask, box, crop);
 }
 

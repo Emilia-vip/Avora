@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GarmentImage } from '@/components/garment/garment-image';
 import { WeatherHeroCard } from '@/components/weather/weather-hero-card';
 import { displayTitle, Fonts, Radius } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
@@ -19,9 +20,9 @@ import { userDisplayName } from '@/lib/user-name';
 
 function greeting() {
   const hour = new Date().getHours();
-  if (hour < 11) return 'God morgon';
-  if (hour < 18) return 'God eftermiddag';
-  return 'God kväll';
+  if (hour < 11) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
 export default function Home() {
@@ -37,7 +38,7 @@ export default function Home() {
   // Until the user asks for something, show a weather-based look from their own wardrobe.
   const dailyLook = useMemo(() => (
     wardrobeItems.length >= 2 && weather
-      ? matchOutfitFromWardrobe(wardrobeItems, 'dagens look', weather, genderFromUser(user))
+      ? matchOutfitFromWardrobe(wardrobeItems, "today's look", weather, genderFromUser(user))
       : null
   ), [wardrobeItems, weather, user]);
   const look = requestedLook ?? dailyLook;
@@ -49,12 +50,13 @@ export default function Home() {
 
   const createSuggestion = async () => {
     const wish = request.trim();
+    if (styling) return;
     if (!wish) {
-      Alert.alert('Skriv ett önskemål', 'Till exempel “dejt i kväll” eller “casual fredag”.');
+      Alert.alert('Tell the stylist what you need', 'For example “date night” or “casual Friday”.');
       return;
     }
     if (wardrobeItems.length < 2) {
-      Alert.alert('För få plagg', 'Lägg till minst två plagg i garderoben först.');
+      Alert.alert('Not enough clothes', 'Add at least two garments to your wardrobe first.');
       return;
     }
 
@@ -64,7 +66,7 @@ export default function Home() {
     try {
       if (!settings.aiSuggestionsEnabled) {
         const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather, gender);
-        if (!fallback) throw new Error('Kunde inte sätta ihop en look från garderoben.');
+        if (!fallback) throw new Error('Could not put together a look from your wardrobe.');
         setLook(fallback);
         return;
       }
@@ -92,12 +94,18 @@ export default function Home() {
       }
 
       const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather, gender);
-      if (!fallback) throw new Error('Kunde inte sätta ihop en look från garderoben.');
+      if (!fallback) throw new Error('Could not put together a look from your wardrobe.');
       setLook(fallback);
-    } catch {
+    } catch (error) {
+      // Still show a look built on the phone, but say why the AI stylist didn't answer (e.g. daily quota used up).
       const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather, gender);
-      if (fallback) setLook(fallback);
-      else Alert.alert('Kunde inte skapa look', 'Försök med ett annat önskemål eller lägg till fler plagg.');
+      const reason = error instanceof Error ? error.message : null;
+      if (fallback) {
+        setLook(fallback);
+        if (reason) Alert.alert('The AI stylist is unavailable', `${reason}\n\nHere is a look picked on your phone instead.`);
+      } else {
+        Alert.alert('Could not create a look', reason ?? 'Try another request or add more clothes.');
+      }
     } finally {
       setStyling(false);
     }
@@ -123,11 +131,11 @@ export default function Home() {
           style={styles.lookCard}>
           <View style={styles.lookTop}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.lookKicker, { color: colors.heroAccent }]}>Dagens look</Text>
+              <Text style={[styles.lookKicker, { color: colors.heroAccent }]}>Today’s look</Text>
               <Text style={[styles.lookTitle, { color: colors.onHero }]} numberOfLines={2}>
                 {styling
-                  ? 'Sätter ihop en look…'
-                  : look?.title ?? 'Väntar på ditt önskemål'}
+                  ? 'Putting a look together…'
+                  : look?.title ?? 'Waiting for your request'}
               </Text>
             </View>
             {look && !styling ? (
@@ -142,10 +150,10 @@ export default function Home() {
           {!look || styling ? (
             <Text style={[styles.lookReason, { color: colors.onHeroMuted }]} numberOfLines={2}>
               {styling
-                ? 'Hämtar plagg från din garderob…'
+                ? 'Picking pieces from your wardrobe…'
                 : weather
-                  ? `Skriv vad du ska göra så anpassas looken till ${weather.summary}.`
-                  : 'Skriv vad du ska göra så sätts en look ihop från garderoben.'}
+                  ? `Tell me what you're up to and the look will suit ${weather.summary}.`
+                  : "Tell me what you're up to and I'll build a look from your wardrobe."}
             </Text>
           ) : null}
 
@@ -158,9 +166,10 @@ export default function Home() {
                 item.image
                   ? (
                     <View key={item.id} style={styles.lookImageFrame}>
-                      <Image
-                        source={{ uri: item.image }}
-                        style={[styles.lookImage, { backgroundColor: colors.garmentTile }]}
+                      <GarmentImage
+                      uri={item.image}
+                      path={item.image_path}
+                      style={[styles.lookImage, { backgroundColor: colors.garmentTile }]}
                       />
                     </View>
                   )
@@ -175,13 +184,13 @@ export default function Home() {
 
           <View style={[styles.stylistDivider, { backgroundColor: colors.heroOverlay }]} />
           <Text style={[styles.stylistPrompt, { color: colors.onHero }]}>
-            Vad ska du ha på dig?
+            What are you dressing for?
           </Text>
           <View style={[styles.stylistInput, { backgroundColor: colors.heroOverlay }]}>
             <TextInput
               value={request}
               onChangeText={setRequest}
-              placeholder="Dejt, jobb, vardag..."
+              placeholder="Date, work, everyday…"
               placeholderTextColor={colors.onHeroMuted}
               style={[styles.stylistField, { color: colors.onHero }]}
               onSubmitEditing={createSuggestion}
@@ -189,7 +198,13 @@ export default function Home() {
             />
             <Pressable
               onPress={createSuggestion}
-              style={({ pressed }) => [styles.send, { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 }]}>
+              disabled={styling}
+              accessibilityRole="button"
+              accessibilityLabel="Get a look"
+              style={({ pressed }) => [
+                styles.send,
+                { backgroundColor: colors.accent, opacity: styling ? 0.6 : pressed ? 0.85 : 1 },
+              ]}>
               <Ionicons
                 name={styling ? 'hourglass-outline' : 'arrow-forward'}
                 size={18}
@@ -202,27 +217,34 @@ export default function Home() {
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
             {previewItems.some((item) => item.favorite)
-              ? 'Favoriter'
-              : 'I garderoben'}
+              ? 'Favourites'
+              : 'In your wardrobe'}
           </Text>
           <Pressable
             onPress={() => router.push('/wardrobe')}
             style={[styles.seeAllPill, { backgroundColor: colors.card }]}>
-            <Text style={[styles.seeAll, { color: colors.text }]}>Se alla</Text>
+            <Text style={[styles.seeAll, { color: colors.text }]}>See all</Text>
             <Ionicons name="arrow-forward" size={13} color={colors.text} />
           </Pressable>
         </View>
         {previewItems.length === 0 ? (
           <Text style={[styles.empty, { color: colors.textMuted }]}>
-            Inga plagg ännu. Lägg till något med plusknappen.
+            No clothes yet. Add something with the plus button.
           </Text>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
             {previewItems.map((item) => (
-              <Pressable key={item.id} onPress={() => router.push('/wardrobe')} style={styles.railItem}>
+              <Pressable
+                key={item.id}
+                onPress={() => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
+                style={styles.railItem}>
                 <View style={[styles.railImageWrap, { backgroundColor: colors.garmentTile }]}>
                   {item.image ? (
-                    <Image source={{ uri: item.image }} style={styles.railImage} />
+                    <GarmentImage
+                      uri={item.image}
+                      path={item.image_path}
+                      style={styles.railImage}
+                    />
                   ) : (
                     <View style={[styles.railPlaceholder, { backgroundColor: colors.input }]}>
                       <Ionicons name="shirt-outline" size={24} color={colors.textMuted} />

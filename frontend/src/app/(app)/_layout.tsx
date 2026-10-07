@@ -42,7 +42,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Hem',
+          title: 'Home',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
           ),
@@ -52,7 +52,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="wardrobe"
         options={{
-          title: 'Garderob',
+          title: 'Wardrobe',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'shirt' : 'shirt-outline'} size={22} color={color} />
           ),
@@ -81,7 +81,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profil',
+          title: 'Profile',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
           ),

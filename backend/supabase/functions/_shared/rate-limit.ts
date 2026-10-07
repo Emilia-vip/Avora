@@ -28,6 +28,6 @@ export async function consumeDailyQuota(supabase: SupabaseClient, userId: string
     return;
   }
   if (data === false) {
-    throw new PublicError("Du har använt dagens AI-anrop. Försök igen i morgon.", 429);
+    throw new PublicError("You've used today's AI requests. Try again tomorrow.", 429);
   }
 }

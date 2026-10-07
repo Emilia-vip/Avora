@@ -21,9 +21,9 @@ import { userDisplayName } from '@/lib/user-name';
 import { setUserSetting, type UserSettings } from '@/lib/user-settings';
 
 export default function Profile() {
-  const { logout, updateStyleDna, updateGender, user } = useAuth();
+  const { logout, deleteAccount, updateStyleDna, updateGender, user } = useAuth();
   const colors = useAppTheme();
-  const displayName = userDisplayName(user, 'Profil');
+  const displayName = userDisplayName(user, 'Profile');
   const email = typeof user?.email === 'string' ? user.email : 'you@mail.com';
   const { items, settings: userSettings, setSettings: setUserSettings } = useWardrobe();
 
@@ -35,6 +35,7 @@ export default function Profile() {
   const [savedAvatar, setSavedAvatar] = useState<{ path: string; url: string } | null>(null);
   const [pickedAvatarUri, setPickedAvatarUri] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -78,7 +79,7 @@ export default function Profile() {
       await sideEffect?.(next);
       Alert.alert(title, next ? labels[0] : labels[1]);
     } catch {
-      Alert.alert(title, 'Kunde inte spara.');
+      Alert.alert(title, 'Could not save the setting.');
     }
   };
 
@@ -86,31 +87,63 @@ export default function Profile() {
     {
       icon: 'notifications-outline',
       label: 'Notifications',
-      hint: 'Dagliga påminnelser',
+      hint: 'Daily reminders',
       right: userSettings.notificationsEnabled ? 'On' : 'Off',
-      onPress: () => toggleSetting('notificationsEnabled', 'Notifications', ['På', 'Av'], setDailyAiNotificationEnabled),
+      onPress: () => toggleSetting(
+        'notificationsEnabled',
+        'Notifications',
+        ['Turned on. You will get a daily outfit reminder.', 'Turned off.'],
+        setDailyAiNotificationEnabled,
+      ),
     },
     {
       icon: 'sparkles-outline',
       label: 'AI Suggestions',
-      hint: 'Looks från garderoben',
-      right: userSettings.aiSuggestionsEnabled ? 'Daily' : 'Off',
-      onPress: () => toggleSetting('aiSuggestionsEnabled', 'AI Suggestions', ['På (Daily)', 'Av']),
+      hint: 'Looks from your wardrobe',
+      right: userSettings.aiSuggestionsEnabled ? 'On' : 'Off',
+      onPress: () => toggleSetting(
+        'aiSuggestionsEnabled',
+        'AI Suggestions',
+        ['Turned on. The AI stylist builds your looks.', 'Turned off. Looks are picked on your phone.'],
+      ),
     },
     {
       icon: 'cloud-done-outline',
       label: 'Cloud Sync',
-      hint: 'Synka plagg mellan enheter',
-      right: userSettings.cloudSyncEnabled ? 'Active' : 'Paused',
-      onPress: () => toggleSetting('cloudSyncEnabled', 'Cloud Sync', ['Active', 'Paused']),
-    },
-    {
-      icon: 'settings-outline',
-      label: 'App Settings',
-      hint: 'Mer kontroll snart',
-      onPress: () => Alert.alert('App Settings', 'Kommer snart.'),
+      hint: 'Sync clothes between devices',
+      right: userSettings.cloudSyncEnabled ? 'On' : 'Paused',
+      onPress: () => toggleSetting(
+        'cloudSyncEnabled',
+        'Cloud Sync',
+        ['Turned on. Your wardrobe syncs again.', 'Paused. You can browse your wardrobe offline but not add or change clothes.'],
+      ),
     },
   ];
+
+  const confirmDeleteAccount = () => {
+    if (deleting) return;
+    Alert.alert(
+      'Delete account?',
+      'Your account, all your clothes and all your photos will be permanently deleted. This can\'t be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteAccount();
+              // Signing out sends the app back to the login screen.
+            } catch (error) {
+              setDeleting(false);
+              Alert.alert('Could not delete your account', error instanceof Error ? error.message : 'Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleSelectGender = async (next: GenderValue) => {
     if (genderSaving || gender === next) return;
@@ -121,7 +154,7 @@ export default function Profile() {
       await updateGender(next);
     } catch {
       setGender(previous);
-      Alert.alert('Kunde inte spara kön.');
+      Alert.alert('Could not save your gender.');
     } finally {
       setGenderSaving(false);
     }
@@ -129,14 +162,14 @@ export default function Profile() {
 
   const pickAvatarFromLibrary = async () => {
     if (!user) {
-      Alert.alert('Logga in', 'Du måste vara inloggad för att byta profilbild.');
+      Alert.alert('Sign in', 'You need to be signed in to change your profile picture.');
       return;
     }
     if (avatarUploading) return;
 
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Tillstånd krävs', 'Tillåt åtkomst till foton för att välja en profilbild.');
+      Alert.alert('Photo access needed', 'Allow photo access to choose a profile picture.');
       return;
     }
 
@@ -156,7 +189,7 @@ export default function Profile() {
       setPickedAvatarUri(await uploadProfileAvatar(user.id, localUri));
     } catch (error) {
       setPickedAvatarUri(previous);
-      Alert.alert('Kunde inte spara profilbild', error instanceof Error ? error.message : 'Försök igen.');
+      Alert.alert('Could not save your profile picture', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setAvatarUploading(false);
     }
@@ -169,11 +202,13 @@ export default function Profile() {
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={[styles.eyebrow, { color: colors.accent }]}>Din stilprofil</Text>
-            <Text style={[styles.pageTitle, { color: colors.text }]}>Profil</Text>
+            <Text style={[styles.eyebrow, { color: colors.accent }]}>Your style profile</Text>
+            <Text style={[styles.pageTitle, { color: colors.text }]}>Profile</Text>
           </View>
           <Pressable
             style={[styles.iconButton, softCard]}
+            accessibilityRole="button"
+            accessibilityLabel="Edit Style DNA"
             onPress={() => {
               setIsEditingStyleDna(true);
               setTimeout(() => scrollRef.current?.scrollTo({ y: 280, animated: true }), 100);
@@ -195,7 +230,7 @@ export default function Profile() {
         <ProfileStats
           stats={[
             { label: 'Items', value: stats.items, icon: 'shirt-outline' },
-            { label: 'Outfits', value: stats.favorites, icon: 'heart-outline' },
+            { label: 'Favourites', value: stats.favorites, icon: 'heart-outline' },
             { label: 'Brands', value: stats.brands, icon: 'pricetag-outline' },
           ]}
         />
@@ -210,8 +245,8 @@ export default function Profile() {
         />
 
         <View style={styles.section}>
-          <Text style={[profileStyles.kicker, { color: colors.accent }]}>Preferenser</Text>
-          <Text style={[profileStyles.title, { color: colors.text, marginBottom: 12 }]}>Inställningar</Text>
+          <Text style={[profileStyles.kicker, { color: colors.accent }]}>Preferences</Text>
+          <Text style={[profileStyles.title, { color: colors.text, marginBottom: 12 }]}>Settings</Text>
           <SettingsList rows={settingRows} />
         </View>
 
@@ -223,7 +258,13 @@ export default function Profile() {
             { backgroundColor: pressed ? colors.input : colors.card },
           ]}>
           <Ionicons name="log-out-outline" size={16} color={colors.danger} />
-          <Text style={[styles.logoutText, { color: colors.danger }]}>Logga ut</Text>
+          <Text style={[styles.logoutText, { color: colors.danger }]}>Sign out</Text>
+        </Pressable>
+
+        <Pressable onPress={confirmDeleteAccount} disabled={deleting} style={styles.deleteAccount}>
+          <Text style={[styles.deleteAccountText, { color: colors.textMuted }]}>
+            {deleting ? 'Deleting account…' : 'Delete account'}
+          </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -303,5 +344,15 @@ const styles = StyleSheet.create({
   logoutText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  deleteAccount: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  deleteAccountText: {
+    fontSize: 13,
+    fontWeight: '500',
+    textDecorationLine: 'underline',
   },
 });

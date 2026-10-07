@@ -35,7 +35,7 @@ export async function setDailyAiNotificationEnabled(enabled: boolean) {
   await Notifications.scheduleNotificationAsync({
     content: {
       title: 'AI Suggestions',
-      body: 'Vill du ha ett nytt outfits-förslag? Skriv ett önskemål på Hem.',
+      body: 'Want a new outfit idea? Tell the stylist what you need on the Home tab.',
       data: { kind: DAILY_AI_KIND },
     },
     trigger: {

@@ -17,7 +17,7 @@ const STYLE_DNA_OPTIONS = [
   'Soft Tailoring',
   'Normcore',
   'Contemporary Preppy',
-  'Monokrom Bas',
+  'Monochrome Basics',
   'Business Casual',
   'Weekend Leisure',
   'Workwear Casual',
@@ -44,7 +44,7 @@ function Signup() {
     setSelectedStyleDna((prev) => {
       if (prev.includes(style)) return prev.filter((s) => s !== style);
       if (prev.length >= 5) {
-        Alert.alert('Max 5 stilar');
+        Alert.alert('You can pick up to 5 styles');
         return prev;
       }
       return [...prev, style];
@@ -53,27 +53,27 @@ function Signup() {
 
   const handleSignup = async () => {
     if (!name.trim() || !email || !password || !confirmPassword) {
-      Alert.alert('Fyll i alla fält');
+      Alert.alert('Please fill in all fields');
       return;
     }
 
     if (!gender) {
-      Alert.alert('Välj kön', 'Det hjälper AI:n att ge bättre outfitförslag.');
+      Alert.alert('Choose a gender', 'It helps the AI give better outfit ideas.');
       return;
     }
 
     if (selectedStyleDna.length === 0) {
-      Alert.alert('Välj minst en Style DNA');
+      Alert.alert('Pick at least one style');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Lösenorden matchar inte');
+      Alert.alert('The passwords don\'t match');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Lösenordet måste vara minst 6 tecken');
+      Alert.alert('The password must be at least 6 characters');
       return;
     }
 
@@ -81,11 +81,11 @@ function Signup() {
 
     try {
       await signup(email.trim().toLowerCase(), password, name.trim(), selectedStyleDna, gender);
-      // Navigation sker via auth-state i _layout.tsx
+      // Navigation happens through the auth state in _layout.tsx
     } catch (error) {
       Alert.alert(
-        'Registrering misslyckades',
-        error instanceof Error ? error.message : 'Något gick fel',
+        'Sign up failed',
+        error instanceof Error ? error.message : 'Something went wrong',
       );
     } finally {
       setLoading(false);
@@ -94,28 +94,28 @@ function Signup() {
 
   return (
     <AuthScreen
-      title="Skapa konto"
-      subtitle="Börja din stilresa idag"
+      title="Create account"
+      subtitle="Start your style journey today"
       footer={
         <AuthLink
-          text="Har du redan konto?"
-          linkText="Logga in"
+          text="Already have an account?"
+          linkText="Sign in"
           onPress={() => router.push('/login')}
         />
       }
     >
       <AuthInput
-        label="Namn"
-        placeholder="Ditt namn"
+        label="Name"
+        placeholder="Your name"
         value={name}
         onChangeText={setName}
         autoCapitalize="words"
       />
 
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Kön</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Gender</Text>
         <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
-          Används för mer relevanta AI-förslag.
+          Used to make the AI’s suggestions more relevant.
         </Text>
         <View style={styles.chips}>
           {GENDER_OPTIONS.map((option) => {
@@ -148,7 +148,7 @@ function Signup() {
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Style DNA</Text>
         <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
-          Välj vad som passar din stil bäst (max 5).
+          Pick what fits your style best (up to 5).
         </Text>
 
         <View style={styles.chips}>
@@ -182,8 +182,8 @@ function Signup() {
       </View>
 
       <AuthInput
-        label="E-post"
-        placeholder="din@email.com"
+        label="Email"
+        placeholder="you@email.com"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -191,7 +191,7 @@ function Signup() {
       />
 
       <AuthInput
-        label="Lösenord"
+        label="Password"
         placeholder="••••••••"
         value={password}
         onChangeText={setPassword}
@@ -199,14 +199,14 @@ function Signup() {
       />
 
       <AuthInput
-        label="Bekräfta lösenord"
+        label="Confirm password"
         placeholder="••••••••"
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         secureTextEntry
       />
 
-      <AuthButton title={loading ? 'Skapar konto...' : 'Skapa konto'} onPress={handleSignup} />
+      <AuthButton title={loading ? 'Creating account…' : 'Create account'} onPress={handleSignup} />
     </AuthScreen>
   );
 }

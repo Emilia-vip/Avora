@@ -52,7 +52,7 @@ async function fetchWeather(latitude: number, longitude: number): Promise<Weathe
     '&current=temperature_2m,weather_code,precipitation,is_day' +
     '&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1';
   const response = await fetch(url);
-  if (!response.ok) throw new Error('Kunde inte hämta väder');
+  if (!response.ok) throw new Error('Could not load the weather');
 
   const data = await response.json() as {
     current?: {
@@ -90,13 +90,13 @@ async function reverseGeocode(latitude: number, longitude: number) {
 
   try {
     const response = await fetch(
-      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=sv`,
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
     );
-    if (!response.ok) return 'Din plats';
+    if (!response.ok) return 'Your location';
     const data = await response.json() as { city?: string; locality?: string };
-    return data.city || data.locality || 'Din plats';
+    return data.city || data.locality || 'Your location';
   } catch {
-    return 'Din plats';
+    return 'Your location';
   }
 }
 
@@ -112,21 +112,21 @@ function mapWeatherCode(
   const kind = weatherKind(code, isRainy);
 
   if (kind === 'storm') {
-    return { label: 'åska', icon: 'thunderstorm' as const, isRainy: true, isCold, isWarm, gradient: gradientFor('storm', isDay) };
+    return { label: 'thunderstorms', icon: 'thunderstorm' as const, isRainy: true, isCold, isWarm, gradient: gradientFor('storm', isDay) };
   }
   if (kind === 'snow') {
-    return { label: 'snö', icon: 'snow' as const, isRainy: true, isCold: true, isWarm: false, gradient: gradientFor('snow', isDay) };
+    return { label: 'snow', icon: 'snow' as const, isRainy: true, isCold: true, isWarm: false, gradient: gradientFor('snow', isDay) };
   }
   if (kind === 'rain') {
-    return { label: 'regn', icon: 'rainy' as const, isRainy: true, isCold, isWarm, gradient: gradientFor('rain', isDay) };
+    return { label: 'rain', icon: 'rainy' as const, isRainy: true, isCold, isWarm, gradient: gradientFor('rain', isDay) };
   }
   if (code === 2) {
-    return { label: 'växlande molnighet', icon: 'partly-sunny' as const, isRainy: false, isCold, isWarm, gradient: gradientFor('partly', isDay) };
+    return { label: 'partly cloudy', icon: 'partly-sunny' as const, isRainy: false, isCold, isWarm, gradient: gradientFor('partly', isDay) };
   }
   if (kind === 'cloudy') {
-    return { label: 'mulet', icon: 'cloudy' as const, isRainy: false, isCold, isWarm, gradient: gradientFor('cloudy', isDay) };
+    return { label: 'cloudy', icon: 'cloudy' as const, isRainy: false, isCold, isWarm, gradient: gradientFor('cloudy', isDay) };
   }
-  return { label: 'klart', icon: 'sunny' as const, isRainy: false, isCold, isWarm, gradient: gradientFor('clear', isDay) };
+  return { label: 'clear skies', icon: 'sunny' as const, isRainy: false, isCold, isWarm, gradient: gradientFor('clear', isDay) };
 }
 
 function weatherKind(code: number, isRainy: boolean) {

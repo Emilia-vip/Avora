@@ -34,7 +34,7 @@ export function handle(name: string, handler: (request: Request) => Promise<Resp
         return jsonResponse({ error: error.message }, error.status);
       }
       console.error(`${name} error:`, error);
-      return jsonResponse({ error: "Något gick fel. Försök igen om en stund." }, 500);
+      return jsonResponse({ error: "Something went wrong. Please try again in a moment." }, 500);
     }
   };
 }
@@ -43,6 +43,6 @@ export async function readJson<T>(request: Request): Promise<T> {
   try {
     return await request.json() as T;
   } catch {
-    throw new PublicError("Ogiltig förfrågan.");
+    throw new PublicError("Invalid request.");
   }
 }

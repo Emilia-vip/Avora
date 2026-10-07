@@ -15,7 +15,6 @@ const MAX_BASE64_LENGTH = 10_000_000;
 
 interface RequestBody {
   storagePath?: string;
-  bucket?: string;
   imageBase64?: string;
   mediaType?: string;
 }
@@ -53,19 +52,19 @@ serve(handle("analyze-clothing", async (request) => {
 
   if (body.imageBase64 && body.mediaType) {
     imageBase64 = stripDataUrl(body.imageBase64);
-    if (imageBase64.length > MAX_BASE64_LENGTH) throw new PublicError("Bilden är för stor.", 413);
+    if (imageBase64.length > MAX_BASE64_LENGTH) throw new PublicError("The image is too large.", 413);
     mediaType = normalizeMediaType(body.mediaType);
   } else if (body.storagePath) {
     assertOwnPath(body.storagePath, user);
 
-    const bucket = body.bucket ?? "wardrobe-images";
-    const { data, error } = await supabase.storage.from(bucket).download(body.storagePath);
-    if (error || !data) throw error ?? new Error("Bilden saknas i storage.");
+    // Fixed bucket: the service-role client must never read a bucket the app picks.
+    const { data, error } = await supabase.storage.from("wardrobe-images").download(body.storagePath);
+    if (error || !data) throw error ?? new Error("The image is missing from storage.");
 
     imageBase64 = base64Encode(new Uint8Array(await data.arrayBuffer()));
     mediaType = normalizeMediaType(data.type || "image/jpeg");
   } else {
-    throw new PublicError("Måste ange antingen storagePath eller imageBase64");
+    throw new PublicError("Provide either storagePath or imageBase64.");
   }
 
   await consumeDailyQuota(supabase, user.id, "analyze-clothing");
@@ -74,13 +73,13 @@ serve(handle("analyze-clothing", async (request) => {
     systemInstruction: {
       parts: [{
         text:
-          "Du analyserar klädesplagg från bilder åt en garderobs-app. Titta på plagget, inte personen eller bakgrunden. Gissa material utifrån ytans utseende. Om bilden inte visar ett tydligt plagg, sätt category till okänt. Skriv alla texter på svenska. Svara bara med JSON.",
+          "You analyse clothing from photos for a wardrobe app. Look at the garment, not the person or the background. Guess the material from how the surface looks. If the photo does not show a clear garment, set category to unknown. Write all text in English. In description, give a short garment name of 2-5 words, e.g. \"Navy wool blazer\". Answer with JSON only.",
       }],
     },
     contents: [{
       parts: [
         { inlineData: { mimeType: mediaType, data: imageBase64 } },
-        { text: "Analysera plagget: färger, mönster, material och stil." },
+        { text: "Analyse the garment: colours, pattern, material, style and the seasons it suits." },
       ],
     }],
     generationConfig: {
@@ -102,12 +101,12 @@ function normalizeAnalysis(raw: Record<string, unknown>): ClothingAnalysis {
     : [];
 
   return {
-    category: String(raw.category ?? "okänt").trim() || "okänt",
-    colors: colors.length ? colors : ["okänd"],
-    pattern: String(raw.pattern ?? "okänt").trim() || "okänt",
-    material: String(raw.material ?? "okänt").trim() || "okänt",
-    style: String(raw.style ?? "okänd").trim() || "okänd",
-    season: season.length ? season : ["alla"],
+    category: String(raw.category ?? "unknown").trim() || "unknown",
+    colors: colors.length ? colors : ["unknown"],
+    pattern: String(raw.pattern ?? "unknown").trim() || "unknown",
+    material: String(raw.material ?? "unknown").trim() || "unknown",
+    style: String(raw.style ?? "unknown").trim() || "unknown",
+    season: season.length ? season : ["all"],
     description: String(raw.description ?? "").trim(),
   };
 }

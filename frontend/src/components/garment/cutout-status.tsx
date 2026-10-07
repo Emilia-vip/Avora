@@ -26,17 +26,17 @@ export function CutoutStatusRow({
       {status === 'working' ? (
         <>
           <ActivityIndicator size="small" color={colors.accent} />
-          <Text style={[styles.text, { color: colors.textMuted }]}>AI klipper ut plagget…</Text>
+          <Text style={[styles.text, { color: colors.textMuted }]}>AI is cutting out the garment…</Text>
         </>
       ) : status === 'done' ? (
         <>
           <Ionicons name="sparkles" size={14} color={colors.accent} />
           <Text style={[styles.text, { color: colors.text }]}>
-            {showOriginal ? 'Originalbild' : 'Urklippt av AI'}
+            {showOriginal ? 'Original photo' : 'Cut out by AI'}
           </Text>
           <Pressable onPress={onToggleOriginal} hitSlop={8}>
             <Text style={[styles.action, { color: colors.accent }]}>
-              {showOriginal ? 'Visa urklipp' : 'Visa original'}
+              {showOriginal ? 'Show cut-out' : 'Show original'}
             </Text>
           </Pressable>
         </>
@@ -44,12 +44,12 @@ export function CutoutStatusRow({
         <>
           <Text style={[styles.text, { color: colors.textMuted }]}>
             {error
-              ? `${error} Du kan spara bilden som den är.`
-              : 'Kunde inte klippa ut plagget – du kan fortfarande justera och spara bilden.'}
+              ? `${error} You can save the photo as it is.`
+              : 'Could not cut out the garment. You can still adjust and save the photo.'}
           </Text>
           {onRetry ? (
             <Pressable onPress={onRetry} hitSlop={8}>
-              <Text style={[styles.action, { color: colors.accent }]}>Försök igen</Text>
+              <Text style={[styles.action, { color: colors.accent }]}>Try again</Text>
             </Pressable>
           ) : null}
         </>

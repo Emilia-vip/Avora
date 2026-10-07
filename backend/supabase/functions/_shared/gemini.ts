@@ -10,7 +10,7 @@ export function modelList(override: string | undefined, fallbacks: string[]) {
 }
 
 export function requireGeminiKey() {
-  if (!geminiApiKey) throw new Error("GEMINI_API_KEY saknas.");
+  if (!geminiApiKey) throw new Error("GEMINI_API_KEY is missing.");
   return geminiApiKey;
 }
 
@@ -47,12 +47,12 @@ export function errorMessage(raw: string) {
 export function unavailableError(statuses: number[], details: string[]) {
   console.error("Gemini failed:", details.join(" | "));
   if (statuses.includes(503)) {
-    return new PublicError("AI:n är överbelastad just nu. Försök igen om en stund.", 503);
+    return new PublicError("The AI is overloaded right now. Please try again in a moment.", 503);
   }
   if (statuses.includes(429)) {
-    return new PublicError("AI-kvoten är slut för tillfället. Försök igen senare.", 503);
+    return new PublicError("The AI quota is used up for now. Please try again later.", 503);
   }
-  return new PublicError("AI:n kunde inte svara just nu. Försök igen.", 502);
+  return new PublicError("The AI couldn't respond right now. Please try again.", 502);
 }
 
 /** Tries each model in turn until one returns JSON that parses. */
@@ -71,14 +71,14 @@ export async function generateJson(models: string[], body: unknown): Promise<Rec
 
     const text = responseText(raw);
     if (!text) {
-      details.push(`${model}: tomt svar`);
+      details.push(`${model}: empty response`);
       continue;
     }
 
     try {
       return JSON.parse(text);
     } catch {
-      details.push(`${model}: ogiltig JSON: ${text.slice(0, 200)}`);
+      details.push(`${model}: invalid JSON: ${text.slice(0, 200)}`);
     }
   }
 

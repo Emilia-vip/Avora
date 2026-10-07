@@ -1,137 +1,80 @@
-# Welcome to your Expo app 👋
-
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
-
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Configure Supabase
-
-   Copy `.env.example` to `.env` and replace both placeholder values with the URL and publishable/anon key from your Supabase project's API settings. The variable names must remain:
-
-   ```text
-   EXPO_PUBLIC_SUPABASE_URL=...
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=...
-   ```
-
 # Avora
 
-Avora är en mobilapp för att organisera garderoben och skapa outfitförslag från dina egna kläder. Appen är byggd med Expo och React Native, använder Expo Router för navigering och Supabase för autentisering, databas och bildlagring.
+Avora is a mobile app for organising your wardrobe and getting outfit ideas from your own clothes. It is built with Expo and React Native, uses Expo Router for navigation and Supabase for auth, database and image storage.
 
-## Funktioner
+## Features
 
-- Skapa konto och logga in med e-post och lösenord.
-- Fotografera plagg direkt med kameran.
-- Spara plagg med namn, kategori, märke och färg.
-- Visa, sök och filtrera garderoben.
-- Markera favoritplagg.
-- Se outfitförslag och be Mini AI Stylist om en look utifrån garderoben.
-- Hålla varje användares plagg och bilder privata med Row Level Security.
+- Sign up and sign in with email and password, including password reset.
+- Add clothes by taking a photo or picking one from the photo library. The AI cuts the garment out and fills in category, colour, pattern, material, style and season.
+- Browse, search and filter the wardrobe; mark favourites.
+- Open a garment to correct its details or delete it.
+- Get a look for any occasion from the AI stylist, matched to the local weather.
+- Delete the account together with all clothes and photos.
+- Every user's clothes and photos are private through Row Level Security.
 
-## Teknik
+## Tech
 
-- [Expo SDK 54](https://docs.expo.dev/)
-- React Native 0.81 och React 19
+- [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/), React Native and React 19
 - TypeScript
 - [Expo Router](https://docs.expo.dev/router/introduction)
-- [Supabase](https://supabase.com/) Auth, Postgres och Storage
-- `expo-image-picker` för kamerabilder
+- [Supabase](https://supabase.com/) Auth, Postgres, Storage and Edge Functions (see [`../backend`](../backend/README.md))
+- `expo-image` for cached garment photos, `expo-image-picker` for camera and library
 
-## Förutsättningar
+## Setup
 
-Installera följande innan du börjar:
-
-- Node.js LTS
-- npm
-- Ett Supabase-projekt
-- Expo Go eller en iOS-/Android-simulator
-
-## Installation
-
-1. Installera projektets beroenden:
+1. Install dependencies:
 
    ```bash
    npm install
    ```
 
-2. Skapa en lokal miljövariabelfil:
+2. Create a local env file and add the project URL and the publishable/anon key from Supabase → Project Settings → API:
 
    ```bash
    cp .env.example .env
    ```
 
-3. Öppna `.env` och ange projektets URL och publika Supabase-nyckel:
-
    ```text
-   EXPO_PUBLIC_SUPABASE_URL=https://ditt-projekt.supabase.co
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=din-anon-eller-publishable-key
+   EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-or-publishable-key
    ```
 
-   Använd en anon/publishable key i appen. Lägg aldrig in en Supabase service role key i `.env` eller i klientkod.
+   Only ever use the anon/publishable key in the app. Never put the service role key in `.env` or client code.
 
-## Konfigurera Supabase
+3. Set up the database and deploy the edge functions as described in [`backend/README.md`](../backend/README.md).
 
-1. Öppna Supabase Dashboard för projektet.
-2. Gå till **SQL Editor**.
-3. Kör innehållet i [`supabase/schema.sql`](supabase/schema.sql) en gång.
-
-Skriptet skapar tabellen `clothing_items`, den privata Storage-bucketen `wardrobe-images` och RLS-policyer som begränsar åtkomst till den inloggade användarens egna data. Bilder sparas i en mapp med användarens UUID och visas via tidsbegränsade signed URLs.
-
-## Starta appen
-
-Starta Expo-utvecklingsservern:
+## Run
 
 ```bash
 npx expo start
 ```
 
-Vanliga kommandon:
-
 ```bash
-npm run ios       # iOS-simulator
-npm run android   # Android-emulator
-npm run web       # webbversion
+npm run ios       # iOS simulator
+npm run android   # Android emulator
 npm run lint      # ESLint
 ```
 
-Skanna QR-koden med Expo Go eller tryck `i` för iOS-simulator och `a` för Android-emulator.
+Clear the Expo cache with `npx expo start -c`.
 
-## Projektstruktur
+## Project structure
 
 ```text
 src/
-├── app/                 # Skärmar och Expo Router-routes
-│   ├── (auth)/          # Login och registrering
-│   └── (app)/           # Hem, garderob, outfits, profil och lägg till
-├── components/          # Återanvändbara UI-komponenter
-├── constants/           # Tema och spacing
-├── contexts/            # Auth-state
-├── hooks/               # Appens hooks
-└── lib/                 # Supabase-klient
-supabase/
-└── schema.sql           # Databas-, Storage- och RLS-konfiguration
+├── app/                 # Screens (Expo Router)
+│   ├── (auth)/          # Sign in and sign up
+│   ├── (app)/           # Tabs: home, wardrobe, add, looks, profile
+│   └── item/[id].tsx    # One garment: edit, favourite, delete
+├── components/          # Reusable UI
+├── constants/           # Theme and spacing
+├── contexts/            # Auth state
+├── hooks/               # Wardrobe, weather and theme hooks
+└── lib/                 # Supabase client, storage, outfit matching, settings
 ```
 
-## Utveckling
+## Troubleshooting
 
-Appens routes ligger i `src/app` och följer Expo Routers filbaserade routing. Efter ändringar kan Expo-cachen rensas med:
-
-```bash
-npx expo start -c
-```
-
-## Felsökning
-
-- Kontrollera att filen `.env` finns i projektroten och att variabelnamnen är exakt rättstavade.
-- Starta om Expo efter ändringar i `.env`.
-- Om registrering eller inloggning ger `UNAUTHORIZED_INVALID_API_KEY`, kontrollera att Supabase-nyckeln hör till rätt projekt och inte är återkallad.
-- Om bilder inte visas, kontrollera att `supabase/schema.sql` har körts och att Storage-bucketen heter `wardrobe-images`.
-
-## Licens
-
-Se [`LICENSE`](LICENSE) för projektets licens.
+- Make sure `.env` exists in this folder and the variable names are spelled exactly as above. Restart Expo after changing it.
+- `UNAUTHORIZED_INVALID_API_KEY` on sign in: the key belongs to another project or has been revoked.
+- Photos don't show: check that `backend/supabase/schema.sql` has been run and the storage bucket is called `wardrobe-images`.
+- AI features fail: check that the edge functions are deployed and `GEMINI_API_KEY` is set as a secret.

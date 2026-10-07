@@ -12,6 +12,8 @@ export type GarmentDetails = {
   pattern: string;
   material: string;
   style: string;
+  /** Comma-separated, e.g. "spring, autumn"; filled in by the AI. */
+  season: string;
 };
 
 export const EMPTY_GARMENT_DETAILS: GarmentDetails = {
@@ -22,14 +24,16 @@ export const EMPTY_GARMENT_DETAILS: GarmentDetails = {
   pattern: '',
   material: '',
   style: '',
+  season: '',
 };
 
 const TEXT_FIELDS: { key: Exclude<keyof GarmentDetails, 'name' | 'category'>; placeholder: string }[] = [
-  { key: 'brand', placeholder: 'Märke (valfritt)' },
-  { key: 'color', placeholder: 'Färg' },
-  { key: 'pattern', placeholder: 'Mönster, t.ex. enfärgad' },
-  { key: 'material', placeholder: 'Material, t.ex. bomull' },
-  { key: 'style', placeholder: 'Stil, t.ex. casual' },
+  { key: 'brand', placeholder: 'Brand (optional)' },
+  { key: 'color', placeholder: 'Colour' },
+  { key: 'pattern', placeholder: 'Pattern, e.g. solid' },
+  { key: 'material', placeholder: 'Material, e.g. cotton' },
+  { key: 'style', placeholder: 'Style, e.g. casual' },
+  { key: 'season', placeholder: 'Season, e.g. spring, autumn' },
 ];
 
 export function GarmentDetailsForm({
@@ -47,11 +51,11 @@ export function GarmentDetailsForm({
       <TextInput
         value={value.name}
         onChangeText={(name) => onChange({ name })}
-        placeholder="Namn på plagget"
+        placeholder="Garment name"
         placeholderTextColor={colors.textMuted}
         style={inputStyle}
       />
-      <Text style={[styles.label, { color: colors.textMuted }]}>Kategori</Text>
+      <Text style={[styles.label, { color: colors.textMuted }]}>Category</Text>
       <View style={styles.categories}>
         {CLOTHING_CATEGORIES.map((category) => {
           const selected = value.category === category;
@@ -74,7 +78,7 @@ export function GarmentDetailsForm({
           );
         })}
       </View>
-      <Text style={[styles.label, { color: colors.textMuted }]}>Detaljer</Text>
+      <Text style={[styles.label, { color: colors.textMuted }]}>Details</Text>
       {TEXT_FIELDS.map((field) => (
         <TextInput
           key={field.key}

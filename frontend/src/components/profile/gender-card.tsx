@@ -15,9 +15,9 @@ export function GenderCard({
 }) {
   const colors = useAppTheme();
   return (
-    <ProfileCard kicker="Profil" title="Kön">
+    <ProfileCard kicker="Profile" title="Gender">
       <Text style={[profileStyles.hint, { color: colors.textMuted }]}>
-        AI:n använder detta för mer relevanta outfitförslag.
+        The AI uses this to make outfit ideas more relevant.
       </Text>
       <View style={profileStyles.tagWrap}>
         {GENDER_OPTIONS.map((option) => (

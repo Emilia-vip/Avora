@@ -1,6 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 
-export function userDisplayName(user: User | null | undefined, fallback = 'Välkommen') {
+export function userDisplayName(user: User | null | undefined, fallback = 'Welcome') {
   const raw = user?.user_metadata?.full_name ?? user?.user_metadata?.name;
   if (typeof raw !== 'string') return fallback;
   const name = raw.trim();

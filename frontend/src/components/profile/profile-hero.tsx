@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Fonts, Radius } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -31,7 +32,7 @@ export function ProfileHero({
           disabled={avatarUploading}
           style={styles.avatarOuter}
           accessibilityRole="button"
-          accessibilityLabel="Byt profilbild">
+          accessibilityLabel="Change profile picture">
           <View style={[styles.avatarWrap, { backgroundColor: colors.heroOverlay }]}>
             {avatarUri ? (
               <Image source={{ uri: avatarUri }} style={styles.avatar} />

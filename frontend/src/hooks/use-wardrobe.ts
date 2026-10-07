@@ -46,7 +46,7 @@ export function useWardrobe() {
           const cached = (await loadWardrobeCache(user.id)).map(withFavorite);
           if (!active) return;
           setItems(cached);
-          setError(cached.length ? message : message ?? 'Cloud Sync är pausad och ingen lokal cache finns.');
+          setError(cached.length ? message : message ?? 'Cloud Sync is paused and there is no offline copy on this device.');
           setLoading(false);
         };
 
@@ -74,7 +74,7 @@ export function useWardrobe() {
           setLoading(false);
           void saveWardrobeCache(user.id, result);
         } catch (loadError) {
-          await showCache(loadError instanceof Error ? loadError.message : 'Kunde inte hämta garderoben.');
+          await showCache(loadError instanceof Error ? loadError.message : 'Could not load your wardrobe.');
         }
       };
 

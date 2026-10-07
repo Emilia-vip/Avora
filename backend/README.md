@@ -1,7 +1,7 @@
 # Avora backend (Supabase)
 
 - `supabase/schema.sql`: the whole database: `clothing_items`, RLS policies, the `wardrobe-images` bucket and the daily AI quota (`ai_usage`). Safe to run again.
-- `supabase/functions/`: edge functions. `_shared/` holds the code they share (CORS, login check, Gemini calls, quota).
+- `supabase/functions/`: edge functions (`analyze-clothing`, `cutout-clothing`, `suggest-outfit`, `delete-account`). `_shared/` holds the code they share (CORS, login check, Gemini calls, quota).
 
 ## Set up / update the database
 
@@ -16,6 +16,7 @@ npx supabase link --project-ref rdiaqomrlueaxnvjycqi
 npx supabase functions deploy analyze-clothing
 npx supabase functions deploy cutout-clothing
 npx supabase functions deploy suggest-outfit
+npx supabase functions deploy delete-account
 ```
 
 Secrets (Dashboard → Edge Functions → Secrets): `GEMINI_API_KEY`, optionally `REMOVE_BG_API_KEY`,

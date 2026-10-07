@@ -25,7 +25,7 @@ export async function signedImageUrls(paths: (string | null | undefined)[]) {
 
 export async function signedImageUrl(path: string) {
   const { data, error } = await supabase.storage.from(WARDROBE_BUCKET).createSignedUrl(path, SIGNED_URL_SECONDS);
-  if (error || !data?.signedUrl) throw error ?? new Error('Kunde inte visa bilden.');
+  if (error || !data?.signedUrl) throw error ?? new Error('Could not show the image.');
   return data.signedUrl;
 }
 
@@ -33,10 +33,10 @@ export async function uploadImage(uri: string, path: string, contentType: string
   const response = await fetch(uri);
   const readType = response.headers.get('content-type') ?? '';
   if (!response.ok || readType.includes('text/html')) {
-    throw new Error('Kunde inte läsa bilden från telefonen.');
+    throw new Error('Could not read the photo from your phone.');
   }
   const data = await response.arrayBuffer();
-  if (!data.byteLength) throw new Error('Bilden var tom.');
+  if (!data.byteLength) throw new Error('The photo was empty.');
   const { error } = await supabase.storage.from(WARDROBE_BUCKET).upload(path, data, { contentType, upsert: false });
   if (error) throw error;
 }

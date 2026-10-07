@@ -22,17 +22,17 @@ const SLOT_BY_CATEGORY: Record<ClothingCategory, ClothingSlot> = {
 export function normalizeCategory(value?: string | null): ClothingCategory | null {
   if (!value) return null;
   const normalized = value.trim().toLowerCase();
-  if (!normalized || normalized === 'okänt' || normalized === 'okänt plagg') return null;
+  if (!normalized || ['okänt', 'okänt plagg', 'unknown'].includes(normalized)) return null;
 
   if (/(klänning|dress|jumpsuit|overall)/.test(normalized)) return 'Dresses';
-  if (/(sko|stövel|sandal|sneaker|loafer|heel|pump|shoe|boot)/.test(normalized)) return 'Shoes';
-  if (/(jacka|kappa|blazer|coat|jacket|kofta|cardigan|väst|overshirt)/.test(normalized)) return 'Jackets';
-  if (/(byx|jeans|kjol|short|legging|tights|trouser|pant|chino|kjol|bottom)/.test(normalized)) return 'Bottoms';
-  if (/(accessoar|väska|hatt|mössa|bälte|smycke|halsband|örhänge|scarf|sjal|keps|accessor)/.test(normalized)) {
+  if (/(sko|stövel|sandal|sneaker|loafer|heel|pump|shoe|boot|trainer|slipper|mule)/.test(normalized)) return 'Shoes';
+  if (/(jacka|kappa|blazer|coat|jacket|kofta|cardigan|väst|vest|overshirt|parka|anorak|trench|gilet)/.test(normalized)) return 'Jackets';
+  if (/(byx|jeans|kjol|skirt|short|legging|tights|trouser|pant|chino|jogger|bottom)/.test(normalized)) return 'Bottoms';
+  if (/(accessoar|väska|hatt|mössa|bälte|smycke|halsband|örhänge|scarf|sjal|keps|accessor|bag|hat|beanie|belt|jewel|necklace|earring|cap|sunglass|watch|glove)/.test(normalized)) {
     return 'Accessories';
   }
   if (
-    /(tröja|skjorta|topp|blus|t-shirt|tshirt|linne|hoodie|sweater|jumper|top|shirt)/.test(normalized)
+    /(tröja|skjorta|topp|blus|t-shirt|tshirt|linne|hoodie|sweater|jumper|top|shirt|blouse|tank|tee|polo|knit|sweatshirt|camisole)/.test(normalized)
     || normalized === 'tops'
   ) {
     return 'Tops';

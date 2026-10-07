@@ -13,7 +13,7 @@ const STYLE_DNA_OPTIONS = [
   'Soft Tailoring',
   'Normcore',
   'Contemporary Preppy',
-  'Monokrom Bas',
+  'Monochrome Basics',
   'Business Casual',
   'Weekend Leisure',
   'Workwear Casual',
@@ -53,7 +53,7 @@ export function StyleDnaCard({
       const previous = current ?? tags;
       if (previous.includes(option)) return previous.filter((value) => value !== option);
       if (previous.length >= MAX_STYLES) {
-        Alert.alert(`Max ${MAX_STYLES} stilar`);
+        Alert.alert(`You can pick up to ${MAX_STYLES} styles`);
         return previous;
       }
       return [...previous, option];
@@ -62,16 +62,16 @@ export function StyleDnaCard({
 
   const save = async () => {
     if (draft.length === 0) {
-      Alert.alert('Välj minst en Style DNA');
+      Alert.alert('Pick at least one style');
       return;
     }
     setSaving(true);
     try {
       await onSave(draft);
       setEditing(false);
-      Alert.alert('Sparat', 'Din Style DNA är uppdaterad.');
+      Alert.alert('Saved', 'Your Style DNA has been updated.');
     } catch {
-      Alert.alert('Kunde inte spara Style DNA.');
+      Alert.alert('Could not save your Style DNA.');
     } finally {
       setSaving(false);
     }
@@ -86,11 +86,11 @@ export function StyleDnaCard({
   );
 
   return (
-    <ProfileCard kicker="Garderobsvibe" title="Style DNA" action={editButton}>
+    <ProfileCard kicker="Wardrobe vibe" title="Style DNA" action={editButton}>
       {editing ? (
         <View style={{ gap: Spacing.md }}>
           <Text style={[profileStyles.hint, { color: colors.textMuted }]}>
-            Välj upp till {MAX_STYLES} stilar som speglar din garderob.
+            Pick up to {MAX_STYLES} styles that reflect your wardrobe.
           </Text>
           <View style={profileStyles.tagWrap}>
             {STYLE_DNA_OPTIONS.map((option) => (
@@ -102,7 +102,7 @@ export function StyleDnaCard({
             <Pressable
               onPress={() => setEditing(false)}
               style={[styles.action, { backgroundColor: colors.input }]}>
-              <Text style={[styles.actionText, { color: colors.textMuted }]}>Ångra</Text>
+              <Text style={[styles.actionText, { color: colors.textMuted }]}>Cancel</Text>
             </Pressable>
             <Pressable
               onPress={save}
@@ -115,7 +115,7 @@ export function StyleDnaCard({
                 },
               ]}>
               <Text style={[styles.actionText, { color: colors.onPrimary }]}>
-                {saving ? 'Sparar...' : 'Spara'}
+                {saving ? 'Saving…' : 'Save'}
               </Text>
             </Pressable>
           </View>
@@ -128,7 +128,7 @@ export function StyleDnaCard({
         </View>
       ) : (
         <Text style={[profileStyles.hint, { color: colors.textMuted }]}>
-          Lägg till plagg eller redigera för att bygga din Style DNA.
+          Add clothes or tap edit to build your Style DNA.
         </Text>
       )}
     </ProfileCard>

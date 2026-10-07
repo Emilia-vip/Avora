@@ -34,7 +34,6 @@ import {
   removeImages,
   signedImageUrl,
   uploadImage,
-  WARDROBE_BUCKET,
 } from '@/lib/wardrobe-storage';
 
 /** Photos are shrunk before upload so the AI functions stay fast. */
@@ -89,24 +88,34 @@ export default function Add() {
     draftPaths.current = [];
   };
 
-  const takePhoto = async () => {
+  const pickPhoto = async (source: 'camera' | 'library') => {
     if (!cloudSyncEnabled) {
-      Alert.alert('Cloud Sync är pausad', 'Slå på Cloud Sync för att kunna lägga till nya plagg.');
+      Alert.alert('Cloud Sync is paused', 'Turn on Cloud Sync to add new clothes.');
       return;
     }
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    const { status } = source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (status !== 'granted') {
-      Alert.alert('Kameratillstånd krävs', 'Tillåt kamera för att fotografera dina kläder.');
+      Alert.alert(
+        source === 'camera' ? 'Camera access needed' : 'Photo access needed',
+        source === 'camera'
+          ? 'Allow camera access to photograph your clothes.'
+          : 'Allow photo access to pick pictures of your clothes.',
+      );
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
+    const options: ImagePicker.ImagePickerOptions = {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [3, 4],
       quality: 0.8,
-    });
+    };
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync(options)
+      : await ImagePicker.launchImageLibraryAsync(options);
 
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
@@ -124,7 +133,7 @@ export default function Add() {
 
   const analyzePhoto = async (uri: string) => {
     if (!user) {
-      Alert.alert('Logga in', 'Du måste vara inloggad för att analysera plagg.');
+      Alert.alert('Sign in', 'You need to be signed in to analyse clothes.');
       return;
     }
 
@@ -150,8 +159,8 @@ export default function Add() {
       if (run !== photoRun.current) return;
       setCutoutStatus('failed');
       Alert.alert(
-        'Kunde inte ladda upp bilden',
-        error instanceof Error ? error.message : 'Du kan fylla i fälten manuellt.'
+        'Could not upload the photo',
+        error instanceof Error ? error.message : 'You can fill in the details yourself.'
       );
     } finally {
       if (run === photoRun.current) setAnalyzing(false);
@@ -161,7 +170,7 @@ export default function Add() {
   const readDetails = async (imagePath: string, run: number) => {
     try {
       const { data, error } = await supabase.functions.invoke('analyze-clothing', {
-        body: { storagePath: imagePath, bucket: WARDROBE_BUCKET },
+        body: { storagePath: imagePath },
       });
 
       if (error) throw new Error(await functionErrorMessage(error));
@@ -173,10 +182,11 @@ export default function Add() {
         pattern?: string;
         material?: string;
         style?: string;
+        season?: string[];
         description?: string;
       } | undefined;
 
-      if (!analysis) throw new Error('Ingen analys kom tillbaka från AI.');
+      if (!analysis) throw new Error('The AI sent back no analysis.');
       if (run !== photoRun.current) return;
 
       setDetails((current) => ({
@@ -186,13 +196,14 @@ export default function Add() {
         pattern: analysis.pattern || current.pattern,
         material: analysis.material || current.material,
         style: analysis.style || current.style,
+        season: analysis.season?.length ? analysis.season.join(', ') : current.season,
         name: current.name.trim() ? current.name : analysis.description || current.name,
       }));
     } catch (error) {
       if (run !== photoRun.current) return;
       Alert.alert(
-        'Kunde inte analysera bilden',
-        error instanceof Error ? error.message : 'Du kan fylla i fälten manuellt.'
+        'Could not analyse the photo',
+        error instanceof Error ? error.message : 'You can fill in the details yourself.'
       );
     }
   };
@@ -200,10 +211,10 @@ export default function Add() {
   const cutOutGarment = async (imagePath: string, run: number) => {
     try {
       const { data, error } = await supabase.functions.invoke('cutout-clothing', {
-        body: { storagePath: imagePath, bucket: WARDROBE_BUCKET },
+        body: { storagePath: imagePath },
       });
       if (error) throw new Error(await functionErrorMessage(error));
-      if (data?.error || !data?.cutoutPath) throw new Error(data?.error ?? 'Inget urklipp.');
+      if (data?.error || !data?.cutoutPath) throw new Error(data?.error ?? 'No cut-out came back.');
 
       if (run !== photoRun.current) {
         removeImages([data.cutoutPath]);
@@ -233,11 +244,11 @@ export default function Add() {
 
   const saveItem = async () => {
     if (!cloudSyncEnabled) {
-      Alert.alert('Cloud Sync är pausad', 'Slå på Cloud Sync för att spara nya plagg.');
+      Alert.alert('Cloud Sync is paused', 'Turn on Cloud Sync to save new clothes.');
       return;
     }
     if (!user || !photoUri || !details.name.trim()) {
-      Alert.alert('Fyll i namn', 'Ta en bild och ge plagget ett namn först.');
+      Alert.alert('Add a name', 'Add a photo and give the garment a name first.');
       return;
     }
 
@@ -268,6 +279,7 @@ export default function Add() {
         pattern: details.pattern.trim() || null,
         material: details.material.trim() || null,
         style: details.style.trim() || null,
+        season: details.season.trim() || 'All',
         image_path: imagePath,
       });
 
@@ -280,7 +292,7 @@ export default function Add() {
       removeImages(draftPaths.current.filter((path) => path !== imagePath));
       draftPaths.current = [];
 
-      Alert.alert('Sparat', 'Plagget finns nu i din garderob.', [
+      Alert.alert('Saved', 'The garment is now in your wardrobe.', [
         { text: 'OK', onPress: () => router.replace('/wardrobe') },
       ]);
       setPhotoUri(null);
@@ -289,7 +301,7 @@ export default function Add() {
       setCutoutStatus('idle');
       setDetails(EMPTY_GARMENT_DETAILS);
     } catch (error) {
-      Alert.alert('Kunde inte spara', error instanceof Error ? error.message : 'Försök igen.');
+      Alert.alert('Could not save', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setSaving(false);
     }
@@ -308,8 +320,8 @@ export default function Add() {
       >
         <View style={styles.container}>
           <View style={styles.header}>
-            <Text style={[styles.eyebrow, { color: colors.accent }]}>Nytt plagg</Text>
-            <Text style={[styles.title, { color: colors.text }]}>Lägg till</Text>
+            <Text style={[styles.eyebrow, { color: colors.accent }]}>New garment</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Add</Text>
           </View>
 
           {photoUri ? (
@@ -329,23 +341,23 @@ export default function Add() {
                 onRetry={uploadedPath ? retryCutout : undefined}
               />
               <Text style={[styles.hint, { color: colors.textMuted }]}>
-                Dra för att flytta · nyp för storlek · vrid med två fingrar · dubbeltryck för att återställa
+                Drag to move · pinch to resize · twist with two fingers · double-tap to reset
               </Text>
 
               <View style={styles.buttonRow}>
                 <Pressable
                   style={[styles.buttonGhost, { backgroundColor: colors.card }]}
-                  onPress={takePhoto}
+                  onPress={() => pickPhoto('camera')}
                 >
                   <Ionicons name="camera-outline" size={16} color={colors.text} />
-                  <Text style={[styles.buttonGhostText, { color: colors.text }]}>Ny bild</Text>
+                  <Text style={[styles.buttonGhostText, { color: colors.text }]}>New photo</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.buttonGhost, { backgroundColor: colors.card }]}
                   onPress={() => editorRef.current?.reset()}
                 >
                   <Ionicons name="refresh" size={16} color={colors.text} />
-                  <Text style={[styles.buttonGhostText, { color: colors.text }]}>Återställ</Text>
+                  <Text style={[styles.buttonGhostText, { color: colors.text }]}>Reset</Text>
                 </Pressable>
               </View>
 
@@ -364,10 +376,10 @@ export default function Add() {
               >
                 <Text style={[styles.buttonText, { color: colors.onPrimary }]}>
                   {saving
-                    ? 'Sparar…'
+                    ? 'Saving…'
                     : analyzing || cutoutStatus === 'working'
-                      ? 'AI läser plagget…'
-                      : 'Spara i garderoben'}
+                      ? 'AI is reading the garment…'
+                      : 'Save to wardrobe'}
                 </Text>
               </Pressable>
             </>
@@ -376,17 +388,24 @@ export default function Add() {
               <View style={[styles.cameraIcon, { backgroundColor: colors.accentSoft }]}>
                 <Ionicons name="camera-outline" size={28} color={colors.accent} />
               </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>Fotografera ett plagg</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>Add a garment</Text>
               <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-                Lägg plagget mot en enkel bakgrund så känner AI:n igen färg, material och stil.
+                Lay the garment on a plain background so the AI can recognise its colour, material and style.
               </Text>
               <Pressable
                 style={[styles.button, { backgroundColor: colors.primary, alignSelf: 'stretch' }]}
-                onPress={takePhoto}
+                onPress={() => pickPhoto('camera')}
               >
                 <Text style={[styles.buttonText, { color: colors.onPrimary }]}>
-                  Ta foto
+                  Take photo
                 </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.buttonGhost, styles.libraryButton, { backgroundColor: colors.input }]}
+                onPress={() => pickPhoto('library')}
+              >
+                <Ionicons name="images-outline" size={16} color={colors.text} />
+                <Text style={[styles.buttonGhostText, { color: colors.text }]}>Choose from library</Text>
               </Pressable>
             </View>
           )}
@@ -493,6 +512,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     alignItems: 'center',
     borderWidth: 0,
+  },
+  libraryButton: {
+    flex: 0,
+    alignSelf: 'stretch',
   },
   buttonGhostText: {
     fontSize: 14,

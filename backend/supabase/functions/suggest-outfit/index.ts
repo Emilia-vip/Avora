@@ -24,7 +24,7 @@ const suggestionSchema = {
 serve(handle("suggest-outfit", async (request) => {
   const body = await readJson<{ wish?: string; weather?: string | null; gender?: string | null }>(request);
   const wish = body.wish?.trim().slice(0, 300);
-  if (!wish) throw new PublicError("Skriv ett önskemål för outfiten.");
+  if (!wish) throw new PublicError("Describe what the outfit is for.");
   const weather = body.weather?.trim().slice(0, 200) || null;
 
   const { supabase, user } = await requireUser(request);
@@ -40,7 +40,7 @@ serve(handle("suggest-outfit", async (request) => {
     .limit(80);
 
   if (error) throw error;
-  if (!items?.length) throw new PublicError("Garderoben är tom. Lägg till plagg först.");
+  if (!items?.length) throw new PublicError("Your wardrobe is empty. Add some clothes first.");
 
   await consumeDailyQuota(supabase, user.id, "suggest-outfit");
 
@@ -49,7 +49,7 @@ serve(handle("suggest-outfit", async (request) => {
   const itemIds = suggestion.itemIds.filter((id) => allowed.has(id));
 
   if (itemIds.length < 2) {
-    throw new PublicError("AI:n kunde inte sätta ihop minst två plagg från garderoben.", 422);
+    throw new PublicError("The AI couldn't put together at least two pieces from your wardrobe.", 422);
   }
 
   return jsonResponse({
@@ -79,29 +79,29 @@ async function suggestOutfit(
   }));
 
   const genderHint = gender === "female"
-    ? "Användaren identifierar sig som kvinna. Prioritera looks som känns naturliga i en kvinnlig garderob (t.ex. klänning, kjol, blus) när plaggen finns, utan att tvinga stereotyper."
+    ? "The user identifies as a woman. Favour looks that feel natural in a women's wardrobe (e.g. dress, skirt, blouse) when those pieces exist, without forcing stereotypes."
     : gender === "male"
-      ? "Användaren identifierar sig som man. Prioritera looks som känns naturliga i en manlig garderob (t.ex. skjorta, byxor, sneakers) när plaggen finns, utan att tvinga stereotyper."
-      : "Kön är ej angivet eller neutralt. Håll dig strikt till plaggen i listan och önskemålet.";
+      ? "The user identifies as a man. Favour looks that feel natural in a men's wardrobe (e.g. shirt, trousers, sneakers) when those pieces exist, without forcing stereotypes."
+      : "Gender is not given or neutral. Stick strictly to the pieces in the list and the request.";
 
   const parsed = await generateJson(geminiModels, {
     systemInstruction: {
       parts: [{
-        text: `Du är stylist för en garderobs-app. Sätt ihop EN outfit från ENDAST plaggen i listan.
-Regler:
-- Använd bara id:n som finns i listan.
-- Välj 2-4 plagg som passar både önskemålet, varandra, vädret och användarens könsprofil (färg, stil, mönster, tillfälle, temperatur).
+        text: `You are the stylist in a wardrobe app. Put together ONE outfit using ONLY the pieces in the list.
+Rules:
+- Only use ids that appear in the list.
+- Pick 2-4 pieces that suit the request, each other, the weather and the user's profile (colour, style, pattern, occasion, temperature).
 - ${genderHint}
-- Kallt eller regn: prioritera jacka/kappa och stängda skor.
-- Varmt: undvik tunga jackor, välj lättare plagg.
-- Blanda inte två överdelar. Klänning ersätter topp+byxa.
-- Max ett starkt mönster. Neutrala färger får gärna bära upp starka färger.
-- Svara på svenska i title och reason och nämn vädret kort.`,
+- Cold or rain: favour a jacket/coat and closed shoes.
+- Warm: avoid heavy jackets, pick lighter pieces.
+- Never combine two tops. A dress replaces top + bottoms.
+- At most one bold pattern. Neutral colours can carry a strong colour.
+- Write title and reason in English and briefly mention the weather.`,
       }],
     },
     contents: [{
       parts: [{
-        text: `Önskemål: ${wish}\nVäder: ${weather ?? "okänt"}\nKön: ${gender ?? "ej angivet"}\n\nGarderob:\n${JSON.stringify(wardrobe)}`,
+        text: `Request: ${wish}\nWeather: ${weather ?? "unknown"}\nGender: ${gender ?? "not given"}\n\nWardrobe:\n${JSON.stringify(wardrobe)}`,
       }],
     }],
     generationConfig: {
@@ -113,7 +113,7 @@ Regler:
 
   return {
     itemIds: Array.isArray(parsed.itemIds) ? parsed.itemIds.map((id) => String(id)) : [],
-    title: String(parsed.title ?? "Föreslagen look"),
+    title: String(parsed.title ?? "Suggested look"),
     reason: String(parsed.reason ?? ""),
     matchPercent: Number(parsed.matchPercent ?? 80),
   };
