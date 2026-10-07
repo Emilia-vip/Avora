@@ -1,309 +1,116 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { cardSurface, displayTitle, Fonts, Radius, Spacing } from '@/constants/theme';
+import { GenderCard } from '@/components/profile/gender-card';
+import { profileStyles } from '@/components/profile/profile-card';
+import { ProfileHero } from '@/components/profile/profile-hero';
+import { ProfileStats } from '@/components/profile/profile-stats';
+import { SettingsList, type SettingRow } from '@/components/profile/settings-list';
+import { StyleDnaCard } from '@/components/profile/style-dna-card';
+import { cardSurface, displayTitle, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { useWardrobe, type WardrobeItem } from '@/hooks/use-wardrobe';
+import { genderFromUser, genderLabel, type GenderValue } from '@/lib/gender';
 import { setDailyAiNotificationEnabled } from '@/lib/local-notifications';
-import {
-  avatarPathFromUser,
-  resolveAvatarUrl,
-  uploadProfileAvatar,
-} from '@/lib/profile-avatar';
-import { GENDER_OPTIONS, genderFromUser, genderLabel, type GenderValue } from '@/lib/gender';
-import { supabase } from '@/lib/supabase';
+import { avatarPathFromUser, resolveAvatarUrl, uploadProfileAvatar } from '@/lib/profile-avatar';
 import { userDisplayName } from '@/lib/user-name';
-import { loadUserSettings, setUserSetting, type UserSettings } from '@/lib/user-settings';
-import { loadWardrobeCache } from '@/lib/wardrobe-cache';
-
-const STYLE_DNA_OPTIONS = [
-  'Smart Casual',
-  'Modern Classic',
-  'Casual Everyday',
-  'Soft Tailoring',
-  'Normcore',
-  'Contemporary Preppy',
-  'Monokrom Bas',
-  'Business Casual',
-  'Weekend Leisure',
-  'Workwear Casual',
-  'Minimalist',
-  'Scandinavian',
-  'Neutral Palette',
-  'Elevated Basics',
-  'Clean Lines',
-] as const;
-
-const STAT_ICONS = {
-  Items: 'shirt-outline',
-  Outfits: 'heart-outline',
-  Brands: 'pricetag-outline',
-} as const;
+import { setUserSetting, type UserSettings } from '@/lib/user-settings';
 
 export default function Profile() {
   const { logout, updateStyleDna, updateGender, user } = useAuth();
   const colors = useAppTheme();
   const displayName = userDisplayName(user, 'Profil');
   const email = typeof user?.email === 'string' ? user.email : 'you@mail.com';
+  const { items, settings: userSettings, setSettings: setUserSettings } = useWardrobe();
 
-  const [userSettings, setUserSettings] = useState<UserSettings>({
-    notificationsEnabled: true,
-    aiSuggestionsEnabled: true,
-    cloudSyncEnabled: true,
-  });
-
-  const [stats, setStats] = useState<{ label: string; value: string }[]>([
-    { label: 'Items', value: '0' },
-    { label: 'Outfits', value: '0' },
-    { label: 'Brands', value: '0' },
-  ]);
-
-  const [styleTags, setStyleTags] = useState<string[]>([]);
   const [isEditingStyleDna, setIsEditingStyleDna] = useState(false);
-  const [styleDnaDraft, setStyleDnaDraft] = useState<string[]>([]);
-  const [styleDnaSaving, setStyleDnaSaving] = useState(false);
   // Holds an optimistic choice while saving; otherwise the saved value on the user wins.
   const [pendingGender, setGender] = useState<GenderValue | null | undefined>(undefined);
   const gender = pendingGender !== undefined ? pendingGender : genderFromUser(user);
   const [genderSaving, setGenderSaving] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [savedAvatar, setSavedAvatar] = useState<{ path: string; url: string } | null>(null);
+  const [pickedAvatarUri, setPickedAvatarUri] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [planLabel, setPlanLabel] = useState('Member');
 
   const scrollRef = useRef<ScrollView>(null);
 
+  const stats = useMemo(() => wardrobeStats(items), [items]);
+  const styleTags = useMemo(() => {
+    const saved = user?.user_metadata?.style_dna;
+    return Array.isArray(saved) && saved.length ? saved.map(String).slice(0, 5) : topStyles(items);
+  }, [user, items]);
+
+  const avatarPath = avatarPathFromUser(user);
   useEffect(() => {
+    if (!avatarPath) return;
     let active = true;
-    loadUserSettings()
-      .then((s) => {
-        if (!active) return;
-        setUserSettings(s);
+    resolveAvatarUrl(avatarPath)
+      .then((url) => {
+        if (active) setSavedAvatar({ path: avatarPath, url });
       })
       .catch(() => {
-        // Keep defaults if secure storage fails.
+        // Falls back to a garment photo below.
       });
-
     return () => {
       active = false;
     };
-  }, []);
+  }, [avatarPath]);
+  const savedAvatarUri = savedAvatar && savedAvatar.path === avatarPath ? savedAvatar.url : null;
 
-  useEffect(() => {
-    let active = true;
-    const loadProfileData = async () => {
-      if (!user) return;
+  // Without a profile picture, show a favourite garment (or any garment) instead.
+  const garmentAvatar = (items.find((item) => item.favorite && item.image) ?? items.find((item) => item.image))?.image ?? null;
+  const avatarUri = pickedAvatarUri ?? savedAvatarUri ?? garmentAvatar;
 
-      try {
-        const items = userSettings.cloudSyncEnabled
-          ? await (async () => {
-              const { data, error } = await supabase
-                .from('clothing_items')
-                .select('brand, category, style, favorite, image_path')
-                .eq('user_id', user.id);
-              if (error || !data) return [];
-              return data.map((item) => ({ ...item, image: null }));
-            })()
-          : await (async () => {
-              const cached = await loadWardrobeCache();
-              return cached.map((item) => ({
-                brand: item.brand ?? null,
-                category: item.category,
-                style: item.style ?? null,
-                favorite: Boolean(item.favorite),
-                image_path: null,
-                image: item.image ?? null,
-              }));
-            })();
+  const toggleSetting = async (
+    key: keyof UserSettings,
+    title: string,
+    labels: [on: string, off: string],
+    sideEffect?: (next: boolean) => Promise<void>,
+  ) => {
+    const next = !userSettings[key];
+    try {
+      setUserSettings((previous) => ({ ...previous, [key]: next }));
+      await setUserSetting(key, next);
+      await sideEffect?.(next);
+      Alert.alert(title, next ? labels[0] : labels[1]);
+    } catch {
+      Alert.alert(title, 'Kunde inte spara.');
+    }
+  };
 
-        if (!active) return;
-
-        const itemsCount = items.length;
-        const brandsCount = new Set(
-          items.map((i: any) => i.brand).filter((v: any) => typeof v === 'string' && v.trim().length > 0),
-        ).size;
-        const favoritesCount = items.filter((i: any) => Boolean(i.favorite)).length;
-
-        setStats([
-          { label: 'Items', value: String(itemsCount) },
-          { label: 'Outfits', value: String(favoritesCount) },
-          { label: 'Brands', value: String(brandsCount) },
-        ]);
-
-        const toCountMap = (values: (string | null | undefined)[]) => {
-          const map = new Map<string, number>();
-          for (const v of values) {
-            const s = (v ?? '').trim();
-            if (!s) continue;
-            map.set(s, (map.get(s) ?? 0) + 1);
-          }
-          return map;
-        };
-
-        const styleMap = toCountMap(items.map((i: any) => i.style));
-        const topStyles = [...styleMap.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([value]) => value);
-
-        const categoryMap = toCountMap(items.map((i: any) => i.category));
-        const topCategories = [...categoryMap.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([value]) => value);
-
-        const merged = [...topStyles];
-        for (const c of topCategories) {
-          if (merged.length >= 5) break;
-          if (!merged.includes(c)) merged.push(c);
-        }
-
-        const styleDnaFromProfile = (user.user_metadata as any)?.style_dna;
-        if (Array.isArray(styleDnaFromProfile) && styleDnaFromProfile.length) {
-          setStyleTags(styleDnaFromProfile.map(String).slice(0, 5));
-        } else {
-          setStyleTags(merged);
-        }
-
-        const computedPlan = itemsCount >= 20 || brandsCount >= 5 ? 'Premium' : 'Member';
-        setPlanLabel(computedPlan);
-
-        const savedAvatarPath = avatarPathFromUser(user);
-        if (savedAvatarPath) {
-          try {
-            const url = await resolveAvatarUrl(savedAvatarPath);
-            if (active) setAvatarUri(url);
-            return;
-          } catch {
-            // Fall through to wardrobe fallback if signed URL fails.
-          }
-        }
-
-        if (userSettings.cloudSyncEnabled) {
-          const preferred =
-            items.find((i: any) => Boolean(i.favorite) && typeof i.image_path === 'string' && i.image_path) ??
-            items.find((i: any) => typeof i.image_path === 'string' && i.image_path) ??
-            null;
-
-          if (preferred?.image_path) {
-            const signed = await supabase.storage
-              .from('wardrobe-images')
-              .createSignedUrl(preferred.image_path, 3600);
-            if (!active) return;
-            setAvatarUri(signed.data?.signedUrl ?? null);
-          } else if (active) {
-            setAvatarUri(null);
-          }
-        } else {
-          const preferred =
-            items.find((i: any) => Boolean(i.favorite) && i.image) ??
-            items.find((i: any) => i.image) ??
-            null;
-          if (active) setAvatarUri(preferred?.image ?? null);
-        }
-      } catch {
-        // Best-effort: keep existing UI.
-      }
-    };
-
-    void loadProfileData();
-    return () => {
-      active = false;
-    };
-  }, [user, userSettings.cloudSyncEnabled]);
-
-  const settings = [
+  const settingRows: SettingRow[] = [
     {
-      icon: 'notifications-outline' as const,
+      icon: 'notifications-outline',
       label: 'Notifications',
       hint: 'Dagliga påminnelser',
       right: userSettings.notificationsEnabled ? 'On' : 'Off',
-      onPress: async () => {
-        const next = !userSettings.notificationsEnabled;
-        try {
-          setUserSettings((prev) => ({ ...prev, notificationsEnabled: next }));
-          await setUserSetting('notificationsEnabled', next);
-          await setDailyAiNotificationEnabled(next);
-          Alert.alert('Notifications', next ? 'På' : 'Av');
-        } catch {
-          Alert.alert('Notifications', 'Kunde inte spara.');
-        }
-      },
+      onPress: () => toggleSetting('notificationsEnabled', 'Notifications', ['På', 'Av'], setDailyAiNotificationEnabled),
     },
     {
-      icon: 'sparkles-outline' as const,
+      icon: 'sparkles-outline',
       label: 'AI Suggestions',
       hint: 'Looks från garderoben',
       right: userSettings.aiSuggestionsEnabled ? 'Daily' : 'Off',
-      onPress: async () => {
-        const next = !userSettings.aiSuggestionsEnabled;
-        try {
-          setUserSettings((prev) => ({ ...prev, aiSuggestionsEnabled: next }));
-          await setUserSetting('aiSuggestionsEnabled', next);
-          Alert.alert('AI Suggestions', next ? 'På (Daily)' : 'Av');
-        } catch {
-          Alert.alert('AI Suggestions', 'Kunde inte spara.');
-        }
-      },
+      onPress: () => toggleSetting('aiSuggestionsEnabled', 'AI Suggestions', ['På (Daily)', 'Av']),
     },
     {
-      icon: 'cloud-done-outline' as const,
+      icon: 'cloud-done-outline',
       label: 'Cloud Sync',
       hint: 'Synka plagg mellan enheter',
       right: userSettings.cloudSyncEnabled ? 'Active' : 'Paused',
-      onPress: async () => {
-        const next = !userSettings.cloudSyncEnabled;
-        try {
-          setUserSettings((prev) => ({ ...prev, cloudSyncEnabled: next }));
-          await setUserSetting('cloudSyncEnabled', next);
-          Alert.alert('Cloud Sync', next ? 'Active' : 'Paused');
-        } catch {
-          Alert.alert('Cloud Sync', 'Kunde inte spara.');
-        }
-      },
+      onPress: () => toggleSetting('cloudSyncEnabled', 'Cloud Sync', ['Active', 'Paused']),
     },
     {
-      icon: 'settings-outline' as const,
+      icon: 'settings-outline',
       label: 'App Settings',
       hint: 'Mer kontroll snart',
-      right: undefined,
-      onPress: async () => {
-        Alert.alert('App Settings', 'Kommer snart.');
-      },
+      onPress: () => Alert.alert('App Settings', 'Kommer snart.'),
     },
   ];
-
-  const toggleStyleDnaDraft = (option: string) => {
-    setStyleDnaDraft((prev) => {
-      if (prev.includes(option)) return prev.filter((s) => s !== option);
-      if (prev.length >= 5) {
-        Alert.alert('Max 5 stilar');
-        return prev;
-      }
-      return [...prev, option];
-    });
-  };
-
-  const handleSaveStyleDna = async () => {
-    if (styleDnaDraft.length === 0) {
-      Alert.alert('Välj minst en Style DNA');
-      return;
-    }
-
-    setStyleDnaSaving(true);
-    try {
-      await updateStyleDna(styleDnaDraft);
-      setStyleTags(styleDnaDraft);
-      setIsEditingStyleDna(false);
-      Alert.alert('Sparat', 'Din Style DNA är uppdaterad.');
-    } catch {
-      Alert.alert('Kunde inte spara Style DNA.');
-    } finally {
-      setStyleDnaSaving(false);
-    }
-  };
 
   const handleSelectGender = async (next: GenderValue) => {
     if (genderSaving || gender === next) return;
@@ -329,10 +136,7 @@ export default function Profile() {
 
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
-        'Tillstånd krävs',
-        'Tillåt åtkomst till foton för att välja en profilbild.',
-      );
+      Alert.alert('Tillstånd krävs', 'Tillåt åtkomst till foton för att välja en profilbild.');
       return;
     }
 
@@ -342,20 +146,17 @@ export default function Profile() {
       aspect: [1, 1],
       quality: 0.85,
     });
-
     if (result.canceled || !result.assets[0]?.uri) return;
 
+    const previous = pickedAvatarUri;
     setAvatarUploading(true);
     try {
       const localUri = result.assets[0].uri;
-      setAvatarUri(localUri);
-      const uploadedUrl = await uploadProfileAvatar(user.id, localUri);
-      setAvatarUri(uploadedUrl);
+      setPickedAvatarUri(localUri);
+      setPickedAvatarUri(await uploadProfileAvatar(user.id, localUri));
     } catch (error) {
-      Alert.alert(
-        'Kunde inte spara profilbild',
-        error instanceof Error ? error.message : 'Försök igen.',
-      );
+      setPickedAvatarUri(previous);
+      Alert.alert('Kunde inte spara profilbild', error instanceof Error ? error.message : 'Försök igen.');
     } finally {
       setAvatarUploading(false);
     }
@@ -365,10 +166,7 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>
             <Text style={[styles.eyebrow, { color: colors.accent }]}>Din stilprofil</Text>
@@ -377,7 +175,6 @@ export default function Profile() {
           <Pressable
             style={[styles.iconButton, softCard]}
             onPress={() => {
-              setStyleDnaDraft(styleTags);
               setIsEditingStyleDna(true);
               setTimeout(() => scrollRef.current?.scrollTo({ y: 280, animated: true }), 100);
             }}>
@@ -385,231 +182,37 @@ export default function Profile() {
           </Pressable>
         </View>
 
-        <View style={[styles.heroCard, { backgroundColor: colors.hero }]}>
-          <View style={styles.profileRow}>
-            <Pressable
-              onPress={pickAvatarFromLibrary}
-              disabled={avatarUploading}
-              style={styles.avatarOuter}
-              accessibilityRole="button"
-              accessibilityLabel="Byt profilbild">
-              <View style={[styles.avatarWrap, { backgroundColor: colors.heroOverlay }]}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatar} />
-                ) : (
-                  <View style={[styles.avatarFallback, { backgroundColor: colors.accentSoft }]}>
-                    <Text style={[styles.avatarFallbackText, { color: colors.accent }]}>
-                      {displayName.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                {avatarUploading ? (
-                  <View style={styles.avatarOverlay}>
-                    <ActivityIndicator color={colors.onPrimary} />
-                  </View>
-                ) : null}
-              </View>
-              <View style={[styles.avatarBadge, { backgroundColor: colors.accent, borderColor: colors.hero }]}>
-                <Ionicons name="camera" size={11} color={colors.accentText} />
-              </View>
-            </Pressable>
+        <ProfileHero
+          name={displayName}
+          email={email}
+          planLabel={stats.items >= 20 || stats.brands >= 5 ? 'Premium' : 'Member'}
+          genderText={genderLabel(gender)}
+          avatarUri={avatarUri}
+          avatarUploading={avatarUploading}
+          onPickAvatar={pickAvatarFromLibrary}
+        />
 
-            <View style={styles.nameBlock}>
-              <Text style={[styles.name, { color: colors.onHero }]}>{displayName}</Text>
-              <Text style={[styles.email, { color: colors.onHeroMuted }]}>{email}</Text>
-              <View style={[styles.planPill, { backgroundColor: colors.heroOverlay }]}>
-                <View style={[styles.planDot, { backgroundColor: colors.heroAccent }]} />
-                <Text style={[styles.planText, { color: colors.onHero }]}>{planLabel}</Text>
-              </View>
-              <Text style={[styles.genderMeta, { color: colors.onHeroMuted }]}>
-                {genderLabel(gender)}
-              </Text>
-            </View>
-          </View>
-        </View>
+        <ProfileStats
+          stats={[
+            { label: 'Items', value: stats.items, icon: 'shirt-outline' },
+            { label: 'Outfits', value: stats.favorites, icon: 'heart-outline' },
+            { label: 'Brands', value: stats.brands, icon: 'pricetag-outline' },
+          ]}
+        />
 
-        <View style={styles.statsRow}>
-          {stats.map((stat) => (
-            <View key={stat.label} style={[styles.statCard, softCard]}>
-              <View style={[styles.statIconWrap, { backgroundColor: colors.accentSoft }]}>
-                <Ionicons
-                  name={STAT_ICONS[stat.label as keyof typeof STAT_ICONS] ?? 'ellipse-outline'}
-                  size={14}
-                  color={colors.accent}
-                />
-              </View>
-              <Text style={[styles.statValue, { color: colors.text }]}>{stat.value}</Text>
-              <Text style={[styles.statLabel, { color: colors.textMuted }]}>{stat.label}</Text>
-            </View>
-          ))}
-        </View>
+        <GenderCard value={gender} saving={genderSaving} onSelect={handleSelectGender} />
 
-        <View style={[styles.styleCard, softCard]}>
-          <Text style={[styles.sectionKicker, { color: colors.accent }]}>Profil</Text>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Kön</Text>
-          <Text style={[styles.styleHint, { color: colors.textMuted }]}>
-            AI:n använder detta för mer relevanta outfitförslag.
-          </Text>
-          <View style={styles.tagWrap}>
-            {GENDER_OPTIONS.map((option) => {
-              const selected = gender === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  disabled={genderSaving}
-                  onPress={() => handleSelectGender(option.value)}
-                  style={[
-                    styles.tag,
-                    selected
-                      ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                      : { backgroundColor: colors.card, borderColor: colors.card },
-                    genderSaving ? { opacity: 0.7 } : null,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.tagText,
-                      { color: selected ? colors.onPrimary : colors.text },
-                    ]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={[styles.styleCard, softCard]}>
-          <View style={styles.styleDnaHeader}>
-            <View>
-              <Text style={[styles.sectionKicker, { color: colors.accent }]}>Garderobsvibe</Text>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Style DNA</Text>
-            </View>
-            <Pressable
-              onPress={() => {
-                if (isEditingStyleDna) {
-                  setIsEditingStyleDna(false);
-                  return;
-                }
-                setStyleDnaDraft(styleTags);
-                setIsEditingStyleDna(true);
-              }}
-              style={({ pressed }) => [
-                styles.styleDnaEditButton,
-                { backgroundColor: pressed ? colors.input : colors.input },
-              ]}>
-              <Ionicons
-                name={isEditingStyleDna ? 'close' : 'create-outline'}
-                size={15}
-                color={colors.textMuted}
-              />
-            </Pressable>
-          </View>
-
-          {isEditingStyleDna ? (
-            <View style={{ gap: Spacing.md }}>
-              <Text style={[styles.styleHint, { color: colors.textMuted }]}>
-                Välj upp till 5 stilar som speglar din garderob.
-              </Text>
-              <View style={styles.tagWrap}>
-                {STYLE_DNA_OPTIONS.map((option) => {
-                  const selected = styleDnaDraft.includes(option);
-                  return (
-                    <Pressable
-                      key={option}
-                      onPress={() => toggleStyleDnaDraft(option)}
-                      style={[
-                        styles.tag,
-                        selected
-                          ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                          : { backgroundColor: colors.card, borderColor: colors.card },
-                      ]}>
-                      <Text
-                        style={[
-                          styles.tagText,
-                          { color: selected ? colors.onPrimary : colors.text },
-                        ]}>
-                        {option}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <View style={styles.styleDnaActions}>
-                <Pressable
-                  onPress={() => {
-                    setIsEditingStyleDna(false);
-                    setStyleDnaDraft([]);
-                  }}
-                  style={({ pressed }) => [
-                    styles.styleDnaCancel,
-                    { backgroundColor: pressed ? colors.input : colors.input },
-                  ]}>
-                  <Text style={[styles.styleDnaCancelText, { color: colors.textMuted }]}>Ångra</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={handleSaveStyleDna}
-                  disabled={styleDnaSaving}
-                  style={({ pressed }) => [
-                    styles.styleDnaSave,
-                    {
-                      backgroundColor: pressed ? colors.primaryPressed : colors.primary,
-                      opacity: styleDnaSaving ? 0.65 : 1,
-                    },
-                  ]}>
-                  <Text style={[styles.styleDnaSaveText, { color: colors.onPrimary }]}>
-                    {styleDnaSaving ? 'Sparar...' : 'Spara'}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : styleTags.length > 0 ? (
-            <View style={styles.tagWrap}>
-              {styleTags.map((tag) => (
-                <View key={tag} style={[styles.tag, { backgroundColor: colors.accentSoft, borderColor: colors.accentSoft }]}>
-                  <Text style={[styles.tagText, { color: colors.text }]}>{tag}</Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={[styles.styleHint, { color: colors.textMuted }]}>
-              Lägg till plagg eller redigera för att bygga din Style DNA.
-            </Text>
-          )}
-        </View>
+        <StyleDnaCard
+          tags={styleTags}
+          editing={isEditingStyleDna}
+          onEditingChange={setIsEditingStyleDna}
+          onSave={updateStyleDna}
+        />
 
         <View style={styles.section}>
-          <Text style={[styles.sectionKicker, { color: colors.accent }]}>Preferenser</Text>
-          <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 12 }]}>Inställningar</Text>
-          <View style={[styles.settingsCard, softCard]}>
-            {settings.map((item, idx) => (
-              <Pressable
-                key={item.label}
-                onPress={item.onPress}
-                style={[
-                  styles.settingRow,
-                  idx !== settings.length - 1 && {
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: colors.border,
-                  },
-                ]}>
-                <View style={[styles.settingIcon, { backgroundColor: colors.accentSoft }]}>
-                  <Ionicons name={item.icon} size={16} color={colors.accent} />
-                </View>
-                <View style={styles.settingCopy}>
-                  <Text style={[styles.settingLabel, { color: colors.text }]}>{item.label}</Text>
-                  <Text style={[styles.settingHint, { color: colors.textMuted }]}>{item.hint}</Text>
-                </View>
-                <View style={styles.settingRight}>
-                  {item.right ? (
-                    <Text style={[styles.settingMeta, { color: colors.textMuted }]}>{item.right}</Text>
-                  ) : null}
-                  <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
-                </View>
-              </Pressable>
-            ))}
-          </View>
+          <Text style={[profileStyles.kicker, { color: colors.accent }]}>Preferenser</Text>
+          <Text style={[profileStyles.title, { color: colors.text, marginBottom: 12 }]}>Inställningar</Text>
+          <SettingsList rows={settingRows} />
         </View>
 
         <Pressable
@@ -625,6 +228,33 @@ export default function Profile() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function wardrobeStats(items: WardrobeItem[]) {
+  return {
+    items: items.length,
+    favorites: items.filter((item) => item.favorite).length,
+    brands: new Set(items.map((item) => item.brand?.trim()).filter(Boolean)).size,
+  };
+}
+
+/** Most common styles in the wardrobe, topped up with the most common categories. */
+function topStyles(items: WardrobeItem[]) {
+  const mostCommon = (values: (string | null | undefined)[]) => {
+    const counts = new Map<string, number>();
+    for (const value of values) {
+      const text = (value ?? '').trim();
+      if (text) counts.set(text, (counts.get(text) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([text]) => text);
+  };
+
+  const merged = mostCommon(items.map((item) => item.style));
+  for (const category of mostCommon(items.map((item) => item.category))) {
+    if (merged.length >= 5) break;
+    if (!merged.includes(category)) merged.push(category);
+  }
+  return merged;
 }
 
 const styles = StyleSheet.create({
@@ -658,239 +288,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroCard: {
-    borderRadius: Radius.xl,
-    padding: 22,
-  },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  avatarOuter: {
-    width: 84,
-    height: 84,
-  },
-  avatarWrap: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    overflow: 'hidden',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarFallback: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarFallbackText: {
-    fontFamily: Fonts.display,
-    fontSize: 34,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  avatarOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(44, 36, 38, 0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarBadge: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nameBlock: {
-    flex: 1,
-    gap: 4,
-  },
-  name: {
-    fontFamily: Fonts.display,
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: -0.7,
-  },
-  email: {
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  planPill: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Radius.full,
-  },
-  planDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  planText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  genderMeta: {
-    fontSize: 12,
-    marginTop: 6,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: Radius.lg,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    gap: 4,
-  },
-  statIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  statValue: {
-    fontFamily: Fonts.display,
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  styleCard: {
-    borderRadius: Radius.xl,
-    padding: 20,
-    gap: 14,
-  },
   section: {
     gap: 2,
-  },
-  sectionKicker: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0,
-  },
-  sectionTitle: {
-    fontFamily: Fonts.display,
-    fontSize: 22,
-    fontWeight: '800',
-    marginTop: 4,
-    letterSpacing: -0.6,
-  },
-  styleHint: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  tagWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tag: {
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-  },
-  tagText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  styleDnaHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  styleDnaEditButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  styleDnaActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  styleDnaCancel: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  styleDnaCancelText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  styleDnaSave: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  styleDnaSaveText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  settingsCard: {
-    borderRadius: Radius.xl,
-    overflow: 'hidden',
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  settingIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  settingCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  settingLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  settingHint: {
-    fontSize: 12,
-  },
-  settingRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  settingMeta: {
-    fontSize: 12,
-    fontWeight: '500',
   },
   logoutButton: {
     marginTop: 4,

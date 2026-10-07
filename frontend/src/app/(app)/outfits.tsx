@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,65 +7,18 @@ import { cardSurface, displayTitle, Fonts, Radius, Spacing } from '@/constants/t
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { genderFromUser } from '@/lib/gender';
-import { matchOutfitFromWardrobe, type OutfitSuggestion, type WardrobeItem } from '@/lib/outfit-match';
-import { loadUserSettings } from '@/lib/user-settings';
-import { loadWardrobeCache, saveWardrobeCache } from '@/lib/wardrobe-cache';
-import { supabase } from '@/lib/supabase';
+import { useWardrobe } from '@/hooks/use-wardrobe';
 import { useWeather } from '@/hooks/use-weather';
+import { matchOutfitFromWardrobe, type OutfitSuggestion } from '@/lib/outfit-match';
 
 const wishes = ['vardag', 'jobbintervju', 'dejt i kväll'];
 
 export default function Outfits() {
   const colors = useAppTheme();
   const { user } = useAuth();
-  const [wardrobeItems, setWardrobeItems] = useState<WardrobeItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { items: wardrobeItems, loading } = useWardrobe();
   const weather = useWeather();
   const gender = genderFromUser(user);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      const loadItems = async () => {
-        const settings = await loadUserSettings();
-
-        if (!settings.cloudSyncEnabled) {
-          const cached = await loadWardrobeCache();
-          if (!active) return;
-          setWardrobeItems(cached as unknown as WardrobeItem[]);
-          setLoading(false);
-          return;
-        }
-
-        if (!user) {
-          setLoading(false);
-          return;
-        }
-        const { data } = await supabase
-          .from('clothing_items')
-          .select('id, name, brand, category, color, pattern, material, style, season, image_path')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        if (!data || !active) {
-          if (active) setLoading(false);
-          return;
-        }
-        const result = await Promise.all(data.map(async (item) => {
-          const signed = item.image_path
-            ? await supabase.storage.from('wardrobe-images').createSignedUrl(item.image_path, 3600)
-            : null;
-          return { ...item, image: signed?.data?.signedUrl ?? null } as WardrobeItem;
-        }));
-        if (active) {
-          setWardrobeItems(result);
-          void saveWardrobeCache(result as any);
-          setLoading(false);
-        }
-      };
-      loadItems();
-      return () => { active = false; };
-    }, [user]),
-  );
 
   const looks = useMemo(() => {
     const used = new Set<string>();

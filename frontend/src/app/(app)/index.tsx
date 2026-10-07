@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { router } from 'expo-router';
+import { useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,12 +9,11 @@ import { WeatherHeroCard } from '@/components/weather/weather-hero-card';
 import { displayTitle, Fonts, Radius } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { useWardrobe, type WardrobeItem } from '@/hooks/use-wardrobe';
 import { useWeather } from '@/hooks/use-weather';
 import { functionErrorMessage } from '@/lib/function-error';
 import { genderFromUser } from '@/lib/gender';
-import { matchOutfitFromWardrobe, type OutfitSuggestion, type WardrobeItem } from '@/lib/outfit-match';
-import { loadUserSettings } from '@/lib/user-settings';
-import { loadWardrobeCache } from '@/lib/wardrobe-cache';
+import { matchOutfitFromWardrobe, type OutfitSuggestion } from '@/lib/outfit-match';
 import { supabase } from '@/lib/supabase';
 import { userDisplayName } from '@/lib/user-name';
 
@@ -29,58 +28,11 @@ export default function Home() {
   const { user } = useAuth();
   const colors = useAppTheme();
   const name = userDisplayName(user);
-  const [wardrobeItems, setWardrobeItems] = useState<WardrobeItem[]>([]);
+  const { items: wardrobeItems, settings } = useWardrobe();
   const [request, setRequest] = useState('');
   const [requestedLook, setLook] = useState<OutfitSuggestion | null>(null);
   const [styling, setStyling] = useState(false);
-  const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(true);
   const weather = useWeather();
-
-  useFocusEffect(useCallback(() => {
-    let active = true;
-
-    const loadAll = async () => {
-      try {
-        const settings = await loadUserSettings();
-        if (!active) return;
-        setAiSuggestionsEnabled(settings.aiSuggestionsEnabled);
-
-        if (!settings.cloudSyncEnabled) {
-          const cached = await loadWardrobeCache();
-          if (!active) return;
-          setWardrobeItems(cached as unknown as WardrobeItem[]);
-          return;
-        }
-
-        if (!user) return;
-        const query = await supabase
-          .from('clothing_items')
-          .select('id, name, brand, category, color, pattern, material, style, season, favorite, image_path')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        const { data } = query.error
-          ? await supabase
-            .from('clothing_items')
-            .select('id, name, brand, category, color, image_path')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-          : query;
-        if (!data || !active) return;
-        const result = await Promise.all(data.map(async (item) => {
-          const signed = item.image_path
-            ? await supabase.storage.from('wardrobe-images').createSignedUrl(item.image_path, 3600)
-            : null;
-          return { ...item, image: signed?.data?.signedUrl ?? null } as unknown as WardrobeItem;
-        }));
-        if (active) setWardrobeItems(result);
-      } catch {
-        // Best-effort: if settings fail, fall back to the current behavior (Supabase).
-      }
-    };
-
-    void loadAll();
-    return () => { active = false; };
-  }, [user]));
 
   // Until the user asks for something, show a weather-based look from their own wardrobe.
   const dailyLook = useMemo(() => (
@@ -91,7 +43,7 @@ export default function Home() {
   const look = requestedLook ?? dailyLook;
 
   const previewItems = useMemo(() => {
-    const favorites = wardrobeItems.filter((item) => 'favorite' in item && Boolean((item as WardrobeItem & { favorite?: boolean }).favorite));
+    const favorites = wardrobeItems.filter((item) => item.favorite);
     return (favorites.length ? favorites : wardrobeItems).slice(0, 8);
   }, [wardrobeItems]);
 
@@ -110,18 +62,14 @@ export default function Home() {
 
     setStyling(true);
     try {
-      if (!aiSuggestionsEnabled) {
+      if (!settings.aiSuggestionsEnabled) {
         const fallback = matchOutfitFromWardrobe(wardrobeItems, wish, weather, gender);
         if (!fallback) throw new Error('Kunde inte sätta ihop en look från garderoben.');
         setLook(fallback);
         return;
       }
 
-      const { data: sessionData } = await supabase.auth.getSession();
       const { data, error } = await supabase.functions.invoke('suggest-outfit', {
-        headers: sessionData.session?.access_token
-          ? { Authorization: `Bearer ${sessionData.session.access_token}` }
-          : undefined,
         body: { wish, weather: weather?.summary ?? null, gender },
       });
 
@@ -253,7 +201,7 @@ export default function Home() {
 
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            {previewItems.some((item) => 'favorite' in item && Boolean((item as { favorite?: boolean }).favorite))
+            {previewItems.some((item) => item.favorite)
               ? 'Favoriter'
               : 'I garderoben'}
           </Text>

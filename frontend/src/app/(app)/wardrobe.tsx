@@ -1,155 +1,58 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { cardSurface, displayTitle, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { useWardrobe, type WardrobeItem } from '@/hooks/use-wardrobe';
 import { CLOTHING_CATEGORIES, matchesCategoryFilter } from '@/lib/clothing-category';
-import { loadUserSettings } from '@/lib/user-settings';
-import { loadWardrobeCache, saveWardrobeCache, type CachedWardrobeItem } from '@/lib/wardrobe-cache';
 import { supabase } from '@/lib/supabase';
-
-type ClothingItem = {
-  id: string;
-  name: string;
-  brand: string | null;
-  category: string;
-  color: string | null;
-  pattern: string | null;
-  material: string | null;
-  style: string | null;
-  image: string | null;
-  image_path?: string | null;
-  favorite: boolean;
-};
+import { removeImages } from '@/lib/wardrobe-storage';
 
 const categories = ['Alla', ...CLOTHING_CATEGORIES];
 
 export default function Wardrobe() {
   const colors = useAppTheme();
   const { user } = useAuth();
-  const [items, setItems] = useState<ClothingItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { items, updateItems, loading, error: loadError, settings } = useWardrobe();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Alla');
-  const [favorites, setFavorites] = useState(new Set<string>());
-  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(true);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      const loadItems = async () => {
-        setLoading(true);
-        setLoadError(null);
-
-        const settings = await loadUserSettings();
-        setCloudSyncEnabled(settings.cloudSyncEnabled);
-
-        if (!settings.cloudSyncEnabled) {
-          const cached = await loadWardrobeCache();
-          if (!active) return;
-
-          const cachedItems = cached.map((item) => ({
-            ...(item as CachedWardrobeItem),
-            favorite: Boolean(item.favorite),
-            image: item.image ?? null,
-          })) as ClothingItem[];
-
-          if (!cachedItems.length) {
-            setLoadError('Cloud Sync är pausad och ingen lokal cache finns.');
-          }
-
-          setItems(cachedItems);
-          setFavorites(new Set(cachedItems.filter((item) => item.favorite).map((item) => item.id)));
-          setLoading(false);
-          return;
-        }
-
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        const currentUser = sessionData.session?.user ?? user;
-        if (sessionError || !currentUser) {
-          if (active) {
-            setLoadError(sessionError?.message ?? 'Ingen inloggad användare hittades.');
-            setLoading(false);
-          }
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from('clothing_items')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .order('created_at', { ascending: false });
-        if (error) {
-          if (active) setLoadError(error.message);
-        } else if (data) {
-          const withImages = await Promise.all(data.map(async (item) => {
-            let image = null;
-            if (item.image_path) {
-              const signed = await supabase.storage.from('wardrobe-images').createSignedUrl(item.image_path, 3600);
-              if (signed.error && active) setLoadError(signed.error.message);
-              image = signed.data?.signedUrl ?? null;
-            }
-            return { ...item, image } as ClothingItem;
-          }));
-          if (active) {
-            setItems(withImages);
-            setFavorites(new Set(withImages.filter((item) => item.favorite).map((item) => item.id)));
-            void saveWardrobeCache(withImages);
-          }
-        }
-        if (active) setLoading(false);
-      };
-      loadItems();
-      return () => { active = false; };
-    }, [user]),
-  );
+  const cloudSyncEnabled = settings.cloudSyncEnabled;
 
   const filteredItems = useMemo(() => items.filter((item) => {
     const matchesCategory = category === 'Alla' || matchesCategoryFilter(item.category, category);
     const matchesQuery = `${item.name} ${item.brand} ${item.color} ${item.pattern} ${item.material} ${item.style}`
       .toLowerCase()
       .includes(query.toLowerCase());
-    return matchesCategory && matchesQuery && (!favoritesOnly || favorites.has(item.id));
-  }), [category, items, query, favoritesOnly, favorites]);
+    return matchesCategory && matchesQuery && (!favoritesOnly || item.favorite);
+  }), [category, items, query, favoritesOnly]);
 
   const toggleFavorite = async (id: string) => {
-    const favorite = !favorites.has(id);
-    setFavorites((current) => {
-      const next = new Set(current);
-      if (favorite) next.add(id); else next.delete(id);
-      return next;
-    });
+    const previous = items;
+    const favorite = !items.find((item) => item.id === id)?.favorite;
+    updateItems(items.map((item) => (item.id === id ? { ...item, favorite } : item)));
+    if (!cloudSyncEnabled || !user) return;
 
-    if (!cloudSyncEnabled) {
-      const nextItems = items.map((item) => (item.id === id ? { ...item, favorite } : item));
-      setItems(nextItems);
-      setFavorites(new Set(nextItems.filter((item) => item.favorite).map((item) => item.id)));
-      await saveWardrobeCache(nextItems);
-      return;
-    }
-
-    const nextItems = items.map((item) => (item.id === id ? { ...item, favorite } : item));
-    setItems(nextItems);
-
-    try {
-      await supabase.from('clothing_items').update({ favorite }).eq('id', id).eq('user_id', user?.id);
-      await saveWardrobeCache(nextItems);
-    } catch {
+    const { error: updateError } = await supabase
+      .from('clothing_items')
+      .update({ favorite })
+      .eq('id', id)
+      .eq('user_id', user.id);
+    if (updateError) {
+      updateItems(previous);
       Alert.alert('Kunde inte uppdatera favorit.');
     }
   };
 
-  const deleteItem = (item: ClothingItem) => {
+  const deleteItem = (item: WardrobeItem) => {
     if (!cloudSyncEnabled) {
       Alert.alert('Cloud Sync är pausad', 'Slå på Cloud Sync för att kunna ta bort plagg.');
       return;
     }
+    if (!user) return;
 
     Alert.alert('Ta bort plagg?', `"${item.name}" tas bort från garderoben. Det går inte att ångra.`, [
       { text: 'Avbryt', style: 'cancel' },
@@ -158,31 +61,22 @@ export default function Wardrobe() {
         style: 'destructive',
         onPress: async () => {
           const previous = items;
-          const nextItems = items.filter((entry) => entry.id !== item.id);
-          setItems(nextItems);
-          setFavorites((current) => {
-            const next = new Set(current);
-            next.delete(item.id);
-            return next;
-          });
+          updateItems(items.filter((entry) => entry.id !== item.id));
 
-          const { data, error } = await supabase
+          const { data, error: deleteError } = await supabase
             .from('clothing_items')
             .delete()
             .eq('id', item.id)
-            .eq('user_id', user?.id)
+            .eq('user_id', user.id)
             .select('id');
           // Without a delete policy Supabase reports success but removes nothing.
-          if (error || !data?.length) {
-            setItems(previous);
-            setFavorites(new Set(previous.filter((entry) => entry.favorite).map((entry) => entry.id)));
-            Alert.alert('Kunde inte ta bort plagget', error?.message ?? 'Databasen tillät inte borttagningen.');
+          if (deleteError || !data?.length) {
+            updateItems(previous);
+            Alert.alert('Kunde inte ta bort plagget', deleteError?.message ?? 'Databasen tillät inte borttagningen.');
             return;
           }
 
-          // The row is gone; a leftover image is harmless, so storage cleanup is best-effort.
-          if (item.image_path) void supabase.storage.from('wardrobe-images').remove([item.image_path]);
-          await saveWardrobeCache(nextItems);
+          removeImages([item.image_path]);
         },
       },
     ]);
@@ -265,7 +159,7 @@ export default function Wardrobe() {
             <Text style={{ color: colors.textMuted, width: '100%' }}>
               {items.length === 0
                 ? 'Inga plagg sparade ännu.'
-                : favoritesOnly && favorites.size === 0
+                : favoritesOnly && !items.some((entry) => entry.favorite)
                   ? 'Du har inga favoriter än – tryck på hjärtat på ett plagg.'
                   : 'Inga plagg matchar sökningen.'}
             </Text>
@@ -293,9 +187,9 @@ export default function Wardrobe() {
                   hitSlop={6}
                   style={[styles.heart, { backgroundColor: colors.card }]}>
                   <Ionicons
-                    name={favorites.has(item.id) ? 'heart' : 'heart-outline'}
+                    name={item.favorite ? 'heart' : 'heart-outline'}
                     size={14}
-                    color={favorites.has(item.id) ? colors.danger : colors.text}
+                    color={item.favorite ? colors.danger : colors.text}
                   />
                 </Pressable>
               </View>

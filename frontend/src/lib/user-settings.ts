@@ -6,6 +6,12 @@ export type UserSettings = {
   cloudSyncEnabled: boolean;
 };
 
+export const DEFAULT_USER_SETTINGS: UserSettings = {
+  notificationsEnabled: true,
+  aiSuggestionsEnabled: true,
+  cloudSyncEnabled: true,
+};
+
 const KEYS: Record<keyof UserSettings, string> = {
   notificationsEnabled: 'avora.notificationsEnabled',
   aiSuggestionsEnabled: 'avora.aiSuggestionsEnabled',

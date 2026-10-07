@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { clearWardrobeCache } from '@/lib/wardrobe-cache';
 
 type AuthContextType = {
   isLoggedIn: boolean;
@@ -101,8 +102,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    const userId = session?.user.id;
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    // The offline wardrobe holds this user's photos; don't leave them for whoever logs in next.
+    if (userId) clearWardrobeCache(userId);
   };
 
   return (
