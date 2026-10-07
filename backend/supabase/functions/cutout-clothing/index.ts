@@ -1,24 +1,18 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { decodeBase64, encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+import { assertOwnPath, requireUser } from "../_shared/auth.ts";
+import { callGemini, errorMessage, modelList, requireGeminiKey, responseText, unavailableError } from "../_shared/gemini.ts";
+import { handle, jsonResponse, PublicError, readJson } from "../_shared/http.ts";
+import { consumeDailyQuota } from "../_shared/rate-limit.ts";
 
-const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 // Optional: a dedicated background-removal service gives far cleaner edges than Gemini's outlines.
 const removeBgApiKey = Deno.env.get("REMOVE_BG_API_KEY");
-const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-const geminiModels = [
-  Deno.env.get("GEMINI_SEGMENT_MODEL"),
+const geminiModels = modelList(Deno.env.get("GEMINI_SEGMENT_MODEL"), [
   "gemini-3.6-flash",
   "gemini-flash-latest",
   "gemini-3.8-flash",
-].filter((model, index, list): model is string => Boolean(model) && list.indexOf(model) === index);
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+]);
 
 const segmentPrompt = `Give the segmentation mask for the single main clothing item in this photo (a garment, shoe, bag or accessory).
 Do not include the background, the floor, hangers, hands, skin or the body of a person wearing it.
@@ -31,77 +25,52 @@ Never output the mask as RLE, base64 or any encoded string.`;
 type Point = [number, number];
 type Segment = { box_2d: number[]; mask: unknown; label?: string };
 
-serve(async (request) => {
-  if (request.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+serve(handle("cutout-clothing", async (request) => {
+  requireGeminiKey();
+  const body = await readJson<{ storagePath?: string }>(request);
+  // Fixed bucket: the service-role client must never read a bucket the app picks.
+  const bucket = "wardrobe-images";
+  const storagePath = body.storagePath?.trim();
+  if (!storagePath) throw new PublicError("storagePath is missing.");
+
+  const { supabase, user } = await requireUser(request);
+  assertOwnPath(storagePath, user);
+
+  const { data: file, error: downloadError } = await supabase.storage.from(bucket).download(storagePath);
+  if (downloadError || !file) throw downloadError ?? new Error("Could not read the image.");
+
+  await consumeDailyQuota(supabase, user.id, "cutout-clothing");
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const cutoutPath = `${user.id}/${Date.now()}-cutout.png`;
+
+  if (removeBgApiKey) {
+    try {
+      const png = await removeBackground(bytes, removeBgApiKey);
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(cutoutPath, png, { contentType: "image/png", upsert: false });
+      if (uploadError) throw uploadError;
+      return jsonResponse({ cutoutPath, label: null });
+    } catch (error) {
+      // Out of credits or service down: fall back to Gemini rather than failing.
+      console.error("remove.bg failed, falling back to Gemini:", error);
+    }
   }
 
-  try {
-    if (!geminiApiKey || !supabaseUrl || !supabaseServiceRoleKey) {
-      throw new Error("Edge Function secrets saknas.");
-    }
+  const segment = await segmentGarment(bytes, file.type || "image/jpeg");
+  if (!segment) throw new PublicError("The AI couldn't find a garment in the photo.", 422);
 
-    const body = await request.json() as { storagePath?: string; bucket?: string };
-    const bucket = body.bucket ?? "wardrobe-images";
-    const storagePath = body.storagePath?.trim();
-    if (!storagePath) {
-      return jsonResponse({ error: "storagePath saknas." }, 400);
-    }
+  const photo = await Image.decode(bytes);
+  const cutout = await cutOut(photo, segment);
 
-    const accessToken = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
-    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-    const { data: userData, error: userError } = accessToken
-      ? await supabase.auth.getUser(accessToken)
-      : { data: { user: null }, error: null };
+  const { error: uploadError } = await supabase.storage
+    .from(bucket)
+    .upload(cutoutPath, await cutout.encode(), { contentType: "image/png", upsert: false });
+  if (uploadError) throw uploadError;
 
-    if (userError || !userData.user) {
-      return jsonResponse({ error: "Inloggning krävs" }, 401);
-    }
-    if (!storagePath.startsWith(`${userData.user.id}/`)) {
-      return jsonResponse({ error: "Otillåten bild." }, 403);
-    }
-
-    const { data: file, error: downloadError } = await supabase.storage.from(bucket).download(storagePath);
-    if (downloadError || !file) throw downloadError ?? new Error("Kunde inte läsa bilden.");
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const cutoutPath = `${userData.user.id}/${Date.now()}-cutout.png`;
-
-    if (removeBgApiKey) {
-      try {
-        const png = await removeBackground(bytes, removeBgApiKey);
-        const { error: uploadError } = await supabase.storage
-          .from(bucket)
-          .upload(cutoutPath, png, { contentType: "image/png", upsert: false });
-        if (uploadError) throw uploadError;
-        return jsonResponse({ cutoutPath, label: null });
-      } catch (error) {
-        // Out of credits or service down: fall back to Gemini rather than failing.
-        console.error("remove.bg failed, falling back to Gemini:", error);
-      }
-    }
-
-    const segment = await segmentGarment(bytes, file.type || "image/jpeg", geminiApiKey);
-    if (!segment) {
-      return jsonResponse({ error: "AI:n hittade inget plagg i bilden." }, 422);
-    }
-
-    const photo = await Image.decode(bytes);
-    const cutout = await cutOut(photo, segment);
-
-    const { error: uploadError } = await supabase.storage
-      .from(bucket)
-      .upload(cutoutPath, await cutout.encode(), { contentType: "image/png", upsert: false });
-    if (uploadError) throw uploadError;
-
-    return jsonResponse({ cutoutPath, label: segment.label ?? null });
-  } catch (error) {
-    console.error("cutout-clothing error:", error);
-    return jsonResponse(
-      { error: error instanceof Error ? error.message : "Okänt fel" },
-      500,
-    );
-  }
-});
+  return jsonResponse({ cutoutPath, label: segment.label ?? null });
+}));
 
 /** remove.bg returns the photo as a transparent PNG cropped to the garment. */
 async function removeBackground(bytes: Uint8Array, apiKey: string) {
@@ -130,8 +99,9 @@ async function removeBackground(bytes: Uint8Array, apiKey: string) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-async function segmentGarment(bytes: Uint8Array, mimeType: string, apiKey: string) {
+async function segmentGarment(bytes: Uint8Array, mimeType: string) {
   const errors: string[] = [];
+  const statuses: number[] = [];
 
   const image = encodeBase64(bytes);
 
@@ -145,11 +115,11 @@ async function segmentGarment(bytes: Uint8Array, mimeType: string, apiKey: strin
     let raw = "";
 
     while (true) {
-      const response = await requestSegmentation(model, image, mimeType, thinkingConfigs[configIndex], apiKey);
+      const response = await requestSegmentation(model, image, mimeType, thinkingConfigs[configIndex]);
       raw = await response.text();
       if (response.ok) break;
 
-      const message = geminiMessage(raw);
+      const message = errorMessage(raw);
       if (response.status === 400 && /thinking level/i.test(message) && configIndex + 1 < thinkingConfigs.length) {
         configIndex++;
         continue;
@@ -162,19 +132,17 @@ async function segmentGarment(bytes: Uint8Array, mimeType: string, apiKey: strin
         await new Promise((resolve) => setTimeout(resolve, 2000 * busyRetries));
         continue;
       }
+      statuses.push(response.status);
       errors.push(`${model} (${response.status}): ${message}`);
       raw = "";
       break;
     }
     if (!raw) continue;
 
-    const text = JSON.parse(raw).candidates?.[0]?.content?.parts
-      ?.map((part: { text?: string }) => part.text ?? "")
-      .join("")
-      .trim();
+    const text = responseText(raw);
 
     try {
-      const parsed = JSON.parse(String(text).replace(/```json|```/g, "").trim());
+      const parsed = JSON.parse(text);
       const list: Segment[] = Array.isArray(parsed) ? parsed : parsed?.boxes ?? parsed?.masks ?? [];
       const valid = list.filter((entry) => Array.isArray(entry?.box_2d) && entry.box_2d.length === 4 && entry.mask);
       if (!valid.length) return null;
@@ -191,7 +159,7 @@ async function segmentGarment(bytes: Uint8Array, mimeType: string, apiKey: strin
     }
   }
 
-  throw new Error(`Gemini-fel. ${errors.join(" | ")}`);
+  throw unavailableError(statuses, errors);
 }
 
 /** Crops the photo to the garment (with a little breathing room) and makes everything else transparent. */
@@ -221,7 +189,7 @@ async function cutOut(photo: Image, segment: Segment) {
     alpha = await maskFromPng(segment.mask, box, crop);
   } else {
     const rings = toRings(segment.mask);
-    if (!rings.length) throw new Error("AI:n gav ingen giltig kontur.");
+    if (!rings.length) throw new Error("The AI returned no valid outline.");
     alpha = rasterize(rings.map((ring) => ring.map((p) => toPixel(p, rings, segment.box_2d, box, W, H))), crop);
   }
 
@@ -244,7 +212,7 @@ async function cutOut(photo: Image, segment: Segment) {
 /** Older Gemini models return a base64 PNG probability map sized to the bounding box. */
 async function maskFromPng(dataUrl: string, box: { x0: number; y0: number; x1: number; y1: number }, crop: Crop) {
   const mask = await decodeMask(dataUrl);
-  if (!mask) throw new Error("AI:n gav en mask som inte gick att läsa.");
+  if (!mask) throw new Error("The AI returned an unreadable mask.");
   return alphaFromBoxMask(mask, box, crop);
 }
 
@@ -372,36 +340,20 @@ function requestSegmentation(
   image: string,
   mimeType: string,
   thinkingConfig: Record<string, unknown>,
-  apiKey: string,
 ) {
-  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
+  return callGemini(model, {
+    contents: [{
+      parts: [
+        { inline_data: { mime_type: mimeType, data: image } },
+        { text: segmentPrompt },
+      ],
+    }],
+    generationConfig: {
+      temperature: 0.2,
+      responseMimeType: "application/json",
+      thinkingConfig,
     },
-    body: JSON.stringify({
-      contents: [{
-        parts: [
-          { inline_data: { mime_type: mimeType, data: image } },
-          { text: segmentPrompt },
-        ],
-      }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json",
-        thinkingConfig,
-      },
-    }),
   });
-}
-
-function geminiMessage(raw: string) {
-  try {
-    return String(JSON.parse(raw)?.error?.message ?? raw).slice(0, 200);
-  } catch {
-    return raw.slice(0, 200);
-  }
 }
 
 function boxArea([ymin, xmin, ymax, xmax]: number[]) {
@@ -410,11 +362,4 @@ function boxArea([ymin, xmin, ymax, xmax]: number[]) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
 }

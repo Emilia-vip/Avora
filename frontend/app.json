@@ -47,14 +47,14 @@
   [
     "expo-location",
     {
-      "locationWhenInUsePermission": "Avora använder din plats för att anpassa looks efter vädret."
+      "locationWhenInUsePermission": "Avora uses your location to match looks to the weather."
     }
   ],
   [
     "expo-image-picker",
     {
-      "cameraPermission": "Avora behöver kameran för att fotografera dina kläder.",
-      "photosPermission": "Avora behöver åtkomst till dina bilder."
+      "cameraPermission": "Avora uses the camera to photograph your clothes.",
+      "photosPermission": "Avora uses your photos so you can add pictures of your clothes."
     }
   ]
 ],

@@ -8,7 +8,7 @@ export function TabPlusButton({ onPress }: BottomTabBarButtonProps) {
   const colors = useAppTheme();
 
   return (
-    <Pressable onPress={onPress} style={styles.wrapper} accessibilityRole="button" accessibilityLabel="Lägg till plagg">
+    <Pressable onPress={onPress} style={styles.wrapper} accessibilityRole="button" accessibilityLabel="Add garment">
       {({ pressed }) => (
         <View
           style={[

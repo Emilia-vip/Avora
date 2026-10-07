@@ -13,59 +13,72 @@ export type CachedWardrobeItem = {
   season?: string | null;
   image: string | null;
   image_path?: string | null;
-  // Only used in wardrobe UI; home/outfits ignore it.
   favorite?: boolean;
 };
 
 /**
- * The wardrobe is cached as a JSON file with each photo downloaded next to it, so offline mode
- * (Cloud Sync off) still shows images after the one-hour signed URLs have expired.
+ * Each user's wardrobe is cached in its own folder (JSON plus downloaded photos), so offline mode
+ * (Cloud Sync off) still shows images after the one-hour signed URLs have expired, and one account
+ * never sees another account's clothes on a shared phone. The folder is deleted on logout.
  */
-const LEGACY_KEY = 'avora.wardrobeCache.v1';
-
-function cacheFile() {
-  return new File(Paths.document, 'wardrobe-cache.json');
+function userDirectory(userId: string) {
+  return new Directory(Paths.document, 'wardrobe-cache', userId.replace(/[^\w-]/g, '_'));
 }
 
-function imageDirectory() {
-  const directory = new Directory(Paths.document, 'wardrobe-images');
-  if (!directory.exists) directory.create({ intermediates: true, idempotent: true });
-  return directory;
+function cacheFile(userId: string) {
+  return new File(userDirectory(userId), 'wardrobe.json');
 }
 
-export async function loadWardrobeCache(): Promise<CachedWardrobeItem[]> {
+/** Older versions kept one shared cache for every account; nobody can tell whose it was, so it is dropped. */
+async function removeLegacyCache() {
   try {
-    const file = cacheFile();
-    if (file.exists) {
-      const parsed = JSON.parse(await file.text());
-      return Array.isArray(parsed) ? parsed : [];
-    }
+    const file = new File(Paths.document, 'wardrobe-cache.json');
+    if (file.exists) file.delete();
+    const images = new Directory(Paths.document, 'wardrobe-images');
+    if (images.exists) images.delete();
+    await SecureStore.deleteItemAsync('avora.wardrobeCache.v1');
+  } catch {
+    // Best-effort.
+  }
+}
 
-    // One-time move from the old SecureStore cache, which is too small for a whole wardrobe.
-    const legacy = await SecureStore.getItemAsync(LEGACY_KEY);
-    if (!legacy) return [];
-    const parsed = JSON.parse(legacy);
-    await SecureStore.deleteItemAsync(LEGACY_KEY);
+export async function loadWardrobeCache(userId: string): Promise<CachedWardrobeItem[]> {
+  await removeLegacyCache();
+  try {
+    const file = cacheFile(userId);
+    if (!file.exists) return [];
+    const parsed = JSON.parse(await file.text());
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 }
 
-export async function saveWardrobeCache(items: CachedWardrobeItem[]): Promise<void> {
+export async function saveWardrobeCache(userId: string, items: CachedWardrobeItem[]): Promise<void> {
   try {
-    const withLocalImages = await Promise.all(items.map(storeImageLocally));
-    cacheFile().write(JSON.stringify(withLocalImages));
+    const directory = userDirectory(userId);
+    if (!directory.exists) directory.create({ intermediates: true, idempotent: true });
+    const withLocalImages = await Promise.all(items.map((item) => storeImageLocally(directory, item)));
+    cacheFile(userId).write(JSON.stringify(withLocalImages));
   } catch {
     // Cache is best-effort only.
   }
 }
 
-async function storeImageLocally(item: CachedWardrobeItem): Promise<CachedWardrobeItem> {
+export function clearWardrobeCache(userId: string) {
+  try {
+    const directory = userDirectory(userId);
+    if (directory.exists) directory.delete();
+  } catch {
+    // Best-effort.
+  }
+}
+
+async function storeImageLocally(directory: Directory, item: CachedWardrobeItem): Promise<CachedWardrobeItem> {
   if (!item.image || !item.image_path || !/^https?:/.test(item.image)) return item;
 
   try {
-    const local = new File(imageDirectory(), item.image_path.replace(/[^\w.-]/g, '_'));
+    const local = new File(directory, item.image_path.replace(/[^\w.-]/g, '_'));
     if (!local.exists) await File.downloadFileAsync(item.image, local);
     return { ...item, image: local.uri };
   } catch {

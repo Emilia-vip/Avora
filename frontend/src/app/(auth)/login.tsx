@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/auth-context';
 
  function Login() {
 
-  const { login } = useAuth();
+  const { login, resetPassword } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +18,7 @@ import { useAuth } from '@/contexts/auth-context';
 
   const handleLogin = async() => {
     if (!email || !password) {
-      Alert.alert('Fyll i alla fält');
+      Alert.alert('Please fill in all fields');
       return;
     }
 
@@ -27,28 +27,43 @@ import { useAuth } from '@/contexts/auth-context';
     try {
       await login(email.trim().toLowerCase(), password);
     } catch (error) {
-      Alert.alert('Inloggning misslyckades',
-        error instanceof Error ? error.message : 'Ett fel uppstod'
+      Alert.alert('Sign in failed',
+        error instanceof Error ? error.message : 'Something went wrong'
       );
     } finally {
       setLoading(false);
     }
   };
 
+  const handleForgotPassword = async () => {
+    const address = email.trim().toLowerCase();
+    if (!address) {
+      Alert.alert('Enter your email', 'Type your email above and tap "Forgot password?" again.');
+      return;
+    }
+
+    try {
+      await resetPassword(address);
+      Alert.alert('Check your inbox', `If ${address} has an account, we've sent a link to reset the password.`);
+    } catch (error) {
+      Alert.alert('Could not send the email', error instanceof Error ? error.message : 'Please try again.');
+    }
+  };
+
   return (
     <AuthScreen
       title="Welcome back"
-      subtitle="Sign in to youre wardrobe"
+      subtitle="Sign in to your wardrobe"
       footer={
         <AuthLink
-          text="Inget konto?"
-          linkText="Skapa konto"
+          text="No account yet?"
+          linkText="Create one"
           onPress={() => router.push('/signup')}
         />
       }>
       <AuthInput
-        label="e-post"
-        placeholder="din@email.com"
+        label="Email"
+        placeholder="you@email.com"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -56,7 +71,7 @@ import { useAuth } from '@/contexts/auth-context';
       />
 
       <AuthInput
-        label="Lösenord"
+        label="Password"
         placeholder="••••••••"
         value={password}
         onChangeText={setPassword}
@@ -64,9 +79,11 @@ import { useAuth } from '@/contexts/auth-context';
       />
 
       <AuthButton
-        title={loading ? 'Loggar in...' : 'Logga in'}
+        title={loading ? 'Signing in…' : 'Sign in'}
         onPress={handleLogin}
       />
+
+      <AuthLink text="" linkText="Forgot password?" onPress={handleForgotPassword} />
     </AuthScreen>
   );
 }

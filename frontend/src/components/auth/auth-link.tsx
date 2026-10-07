@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 type AuthLinkProps = {
+  /** Plain lead-in before the link; leave empty for a link on its own. */
   text: string;
   linkText: string;
   onPress: () => void;
@@ -14,7 +15,7 @@ export function AuthLink({ text, linkText, onPress }: AuthLinkProps) {
   return (
     <Pressable onPress={onPress} style={styles.wrapper}>
       <Text style={[styles.text, { color: colors.textMuted }]}>
-        {text}{' '}
+        {text ? `${text} ` : ''}
         <Text style={[styles.link, { color: colors.link }]}>{linkText}</Text>
       </Text>
     </Pressable>

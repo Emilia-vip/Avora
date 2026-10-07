@@ -1,72 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GarmentImage } from '@/components/garment/garment-image';
 import { cardSurface, displayTitle, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { genderFromUser } from '@/lib/gender';
-import { matchOutfitFromWardrobe, type OutfitSuggestion, type WardrobeItem } from '@/lib/outfit-match';
-import { loadUserSettings } from '@/lib/user-settings';
-import { loadWardrobeCache, saveWardrobeCache } from '@/lib/wardrobe-cache';
-import { supabase } from '@/lib/supabase';
+import { useWardrobe } from '@/hooks/use-wardrobe';
 import { useWeather } from '@/hooks/use-weather';
+import { matchOutfitFromWardrobe, type OutfitSuggestion } from '@/lib/outfit-match';
 
-const wishes = ['vardag', 'jobbintervju', 'dejt i kväll'];
+const wishes = ['everyday', 'job interview', 'date night'];
 
 export default function Outfits() {
   const colors = useAppTheme();
   const { user } = useAuth();
-  const [wardrobeItems, setWardrobeItems] = useState<WardrobeItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { items: wardrobeItems, loading } = useWardrobe();
   const weather = useWeather();
   const gender = genderFromUser(user);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      const loadItems = async () => {
-        const settings = await loadUserSettings();
-
-        if (!settings.cloudSyncEnabled) {
-          const cached = await loadWardrobeCache();
-          if (!active) return;
-          setWardrobeItems(cached as unknown as WardrobeItem[]);
-          setLoading(false);
-          return;
-        }
-
-        if (!user) {
-          setLoading(false);
-          return;
-        }
-        const { data } = await supabase
-          .from('clothing_items')
-          .select('id, name, brand, category, color, pattern, material, style, season, image_path')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        if (!data || !active) {
-          if (active) setLoading(false);
-          return;
-        }
-        const result = await Promise.all(data.map(async (item) => {
-          const signed = item.image_path
-            ? await supabase.storage.from('wardrobe-images').createSignedUrl(item.image_path, 3600)
-            : null;
-          return { ...item, image: signed?.data?.signedUrl ?? null } as WardrobeItem;
-        }));
-        if (active) {
-          setWardrobeItems(result);
-          void saveWardrobeCache(result as any);
-          setLoading(false);
-        }
-      };
-      loadItems();
-      return () => { active = false; };
-    }, [user]),
-  );
 
   const looks = useMemo(() => {
     const used = new Set<string>();
@@ -96,7 +49,7 @@ export default function Outfits() {
             <Text style={[styles.eyebrow, { color: colors.accent }]}>Styling</Text>
             <Text style={[styles.title, { color: colors.text }]}>Looks</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-              {weather ? `Anpassat till ${weather.summary}` : 'Ihopsatta från din garderob'}
+              {weather ? `Suited to ${weather.summary}` : 'Put together from your wardrobe'}
             </Text>
           </View>
           <View style={[styles.iconButton, softCard]}>
@@ -104,14 +57,14 @@ export default function Outfits() {
           </View>
         </View>
 
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Förslag</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Ideas</Text>
 
         {loading ? (
-          <Text style={{ color: colors.textMuted }}>Laddar garderoben…</Text>
+          <Text style={{ color: colors.textMuted }}>Loading your wardrobe…</Text>
         ) : null}
         {!loading && looks.length === 0 ? (
           <Text style={{ color: colors.textMuted }}>
-            Lägg till minst två plagg för att få outfitförslag.
+            Add at least two garments to get outfit ideas.
           </Text>
         ) : null}
 
@@ -132,7 +85,7 @@ export default function Outfits() {
               {outfit.items.map((item) => (
                 <View key={item.id} style={styles.piece}>
                   {item.image
-                    ? <Image source={{ uri: item.image }} style={[styles.image, { backgroundColor: colors.garmentTile }]} />
+                    ? <GarmentImage uri={item.image} path={item.image_path} style={[styles.image, { backgroundColor: colors.garmentTile }]} />
                     : <View style={[styles.image, { backgroundColor: colors.input }]} />}
                 </View>
               ))}

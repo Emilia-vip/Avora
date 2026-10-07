@@ -1,0 +1,11 @@
+project_id = "rdiaqomrlueaxnvjycqi"
+
+[functions.analyze-clothing]
+verify_jwt = false
+
+[functions.suggest-outfit]
+verify_jwt = false
+
+# The functions check the user themselves (_shared/auth.ts).
+[functions.cutout-clothing]
+verify_jwt = false

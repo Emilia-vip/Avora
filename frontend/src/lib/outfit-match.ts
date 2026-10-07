@@ -13,6 +13,7 @@ export type WardrobeItem = {
   style: string | null;
   season?: string | null;
   image: string | null;
+  image_path?: string | null;
 };
 
 export type OutfitSuggestion = {
@@ -26,7 +27,8 @@ type Slot = ClothingSlot;
 
 const NEUTRALS = [
   'svart', 'vit', 'beige', 'grå', 'gra', 'cream', 'kräm', 'navy', 'marin',
-  'brun', 'khaki', 'camel', 'offwhite', 'ivory', 'black', 'white', 'grey', 'gray', 'navy',
+  'brun', 'khaki', 'camel', 'offwhite', 'ivory', 'black', 'white', 'grey', 'gray', 'brown',
+  'off-white', 'charcoal',
 ];
 
 export function matchOutfitFromWardrobe(
@@ -97,7 +99,7 @@ export function matchOutfitFromWardrobe(
     return {
       items: ranked.slice(0, Math.min(3, ranked.length)).map((entry) => entry.item),
       title: titleForOccasion(occasion, wish),
-      reason: 'Jag valde de plagg som bäst matchade önskemålet utifrån din garderob.',
+      reason: 'These are the pieces in your wardrobe that best match what you asked for.',
       matchPercent: 62,
     };
   }
@@ -112,11 +114,11 @@ export function matchOutfitFromWardrobe(
 
 function detectOccasion(wish: string) {
   const text = wish.toLowerCase();
-  if (/(dejt|date|middag|dinner|kväll|evening|fest|party|bröllop)/.test(text)) return 'evening';
-  if (/(jobb|work|möte|meeting|kontor|office|intervju|business|formell)/.test(text)) return 'formal';
-  if (/(träning|gym|sport|workout|löp)/.test(text)) return 'sport';
-  if (/(sommar|summer|varm|strand|beach)/.test(text)) return 'summer';
-  if (/(vinter|winter|kallt|regn|höst)/.test(text)) return 'cold';
+  if (/(dejt|date|middag|dinner|kväll|evening|night|fest|party|bröllop|wedding)/.test(text)) return 'evening';
+  if (/(jobb|work|\bjob\b|möte|meeting|kontor|office|intervju|interview|business|formell|formal)/.test(text)) return 'formal';
+  if (/(träning|gym|sport|workout|löp|\brun|training)/.test(text)) return 'sport';
+  if (/(sommar|summer|varm|warm|\bhot\b|strand|beach)/.test(text)) return 'summer';
+  if (/(vinter|winter|kallt|cold|regn|rain|höst|autumn|\bfall\b)/.test(text)) return 'cold';
   return 'casual';
 }
 
@@ -126,17 +128,17 @@ function titleForOccasion(occasion: ReturnType<typeof detectOccasion>, wish: str
   }
   switch (occasion) {
     case 'evening':
-      return 'Kvällslook';
+      return 'Evening look';
     case 'formal':
-      return 'Jobblook';
+      return 'Work look';
     case 'sport':
-      return 'Träningslook';
+      return 'Workout look';
     case 'summer':
-      return 'Sommarlook';
+      return 'Summer look';
     case 'cold':
-      return 'Varm look';
+      return 'Warm look';
     default:
-      return 'Vardagslook';
+      return 'Everyday look';
   }
 }
 
@@ -151,12 +153,12 @@ function weatherScore(item: WardrobeItem, weather?: WeatherSnapshot | null) {
   const slot = categorySlot(item.category);
   const haystack = `${item.name} ${item.material} ${item.category} ${item.style}`.toLowerCase();
   let score = 0;
-  if (weather.isCold && (slot === 'jacket' || /(ylle|ull|stickat|kappa|täck|hoodie)/.test(haystack))) score += 16;
-  if (weather.isCold && /(linne|short|sandal)/.test(haystack)) score -= 14;
-  if (weather.isWarm && (slot === 'jacket' || /(kappa|ylle|täck|puffer)/.test(haystack))) score -= 14;
-  if (weather.isWarm && /(linne|kort|short|sandal|bomull)/.test(haystack)) score += 10;
+  if (weather.isCold && (slot === 'jacket' || /(ylle|ull|stickat|kappa|täck|hoodie|wool|knit|coat|puffer|fleece)/.test(haystack))) score += 16;
+  if (weather.isCold && /(linne|short|sandal|tank)/.test(haystack)) score -= 14;
+  if (weather.isWarm && (slot === 'jacket' || /(kappa|ylle|täck|puffer|coat|wool)/.test(haystack))) score -= 14;
+  if (weather.isWarm && /(linne|kort|short|sandal|bomull|tank|linen|cotton)/.test(haystack)) score += 10;
   if (weather.isRainy && slot === 'jacket') score += 14;
-  if (weather.isRainy && /(sandal|mocka)/.test(haystack)) score -= 16;
+  if (weather.isRainy && /(sandal|mocka|suede)/.test(haystack)) score -= 16;
   return score;
 }
 
@@ -174,12 +176,12 @@ function occasionScore(
   }
 
   const style = (item.style ?? '').toLowerCase();
-  if (occasion === 'evening' && /(elegant|kväll|formell|fest)/.test(style + haystack)) score += 18;
-  if (occasion === 'formal' && /(formell|classic|kontor|business|minimal)/.test(style + haystack)) score += 18;
-  if (occasion === 'sport' && /(sport|träning|athleisure)/.test(style + haystack)) score += 20;
-  if (occasion === 'casual' && /(casual|street|vardag)/.test(style + haystack)) score += 10;
-  if (occasion === 'summer' && /(linne|bomull|kort|sommar)/.test(haystack)) score += 12;
-  if (occasion === 'cold' && /(ylle|stickat|kappa|jacka|ull)/.test(haystack)) score += 12;
+  if (occasion === 'evening' && /(elegant|kväll|formell|fest|evening|formal|party|dressy)/.test(style + haystack)) score += 18;
+  if (occasion === 'formal' && /(formell|formal|classic|kontor|office|business|minimal|tailor)/.test(style + haystack)) score += 18;
+  if (occasion === 'sport' && /(sport|träning|athleisure|athletic|training)/.test(style + haystack)) score += 20;
+  if (occasion === 'casual' && /(casual|street|vardag|everyday)/.test(style + haystack)) score += 10;
+  if (occasion === 'summer' && /(linne|bomull|kort|sommar|linen|cotton|summer)/.test(haystack)) score += 12;
+  if (occasion === 'cold' && /(ylle|stickat|kappa|jacka|ull|wool|knit|coat|jacket)/.test(haystack)) score += 12;
   score += weatherScore(item, weather);
   score += genderScore(item, gender);
   return score;
@@ -191,13 +193,13 @@ function genderScore(item: WardrobeItem, gender?: GenderValue | null) {
   const haystack = `${item.name} ${item.category} ${item.style}`.toLowerCase();
 
   if (gender === 'female') {
-    if (slot === 'dress' || /(klänning|kjol|blus|heels|klack)/.test(haystack)) return 8;
+    if (slot === 'dress' || /(klänning|kjol|blus|heels|klack|skirt|blouse)/.test(haystack)) return 8;
     if (/(kostymbyxa|fluga|necktie)/.test(haystack)) return -4;
   }
 
   if (gender === 'male') {
-    if (slot === 'dress' || /(klänning|kjol|klack|heels)/.test(haystack)) return -10;
-    if (/(skjorta|chino|kostym|sneaker|loafers)/.test(haystack)) return 6;
+    if (slot === 'dress' || /(klänning|kjol|klack|heels|skirt)/.test(haystack)) return -10;
+    if (/(skjorta|chino|kostym|sneaker|loafers|shirt|suit)/.test(haystack)) return 6;
   }
 
   return 0;
@@ -250,7 +252,7 @@ function harmony(base: WardrobeItem[], candidate: WardrobeItem) {
 function colorTokens(value: string | null) {
   return (value ?? '')
     .toLowerCase()
-    .split(/[,/&+]| och /)
+    .split(/[,/&+]| och | and /)
     .map((part) => part.trim())
     .filter(Boolean);
 }
@@ -261,7 +263,7 @@ function isNeutral(color: string) {
 
 function isLoudPattern(pattern: string | null) {
   const value = (pattern ?? '').toLowerCase();
-  return /(blommig|rutig|prickig|animal|leopard|zebra|grafisk|paisley)/.test(value);
+  return /(blommig|rutig|prickig|animal|leopard|zebra|grafisk|paisley|floral|check|plaid|polka|dot|graphic)/.test(value);
 }
 
 function explainOutfit(
@@ -270,16 +272,16 @@ function explainOutfit(
   weather?: WeatherSnapshot | null,
 ) {
   const names = outfit.map((item) => item.name).join(', ');
-  const colors = [...new Set(outfit.flatMap((item) => colorTokens(item.color)))].slice(0, 3).join(' och ');
+  const colors = [...new Set(outfit.flatMap((item) => colorTokens(item.color)))].slice(0, 3).join(' and ');
   const vibe = occasion === 'evening'
-    ? 'för kvällen'
+    ? 'work for the evening'
     : occasion === 'formal'
-      ? 'till jobb eller mer formellt'
+      ? 'work for the office or something more formal'
       : occasion === 'sport'
-        ? 'för träning'
-        : 'som sitter ihop i vardagen';
-  const weatherBit = weather ? ` Anpassad till ${weather.summary}.` : '';
-  return `${names} funkar ${vibe}${colors ? `, med ${colors}` : ''}.${weatherBit}`;
+        ? 'work for a workout'
+        : 'go well together for everyday';
+  const weatherBit = weather ? ` Suited to ${weather.summary}.` : '';
+  return `${names} ${vibe}${colors ? `, in ${colors}` : ''}.${weatherBit}`;
 }
 
 function compact(items: (WardrobeItem | undefined)[]) {

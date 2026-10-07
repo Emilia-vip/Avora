@@ -1,7 +1,7 @@
 export const GENDER_OPTIONS = [
-  { value: 'female', label: 'Kvinna' },
+  { value: 'female', label: 'Woman' },
   { value: 'male', label: 'Man' },
-  { value: 'other', label: 'Annat / vill ej ange' },
+  { value: 'other', label: 'Other / prefer not to say' },
 ] as const;
 
 export type GenderValue = (typeof GENDER_OPTIONS)[number]['value'];
@@ -18,8 +18,8 @@ export function normalizeGender(value?: string | null): GenderValue | null {
 
 export function genderLabel(value?: string | null) {
   const normalized = normalizeGender(value);
-  if (!normalized) return 'Ej angivet';
-  return GENDER_OPTIONS.find((option) => option.value === normalized)?.label ?? 'Ej angivet';
+  if (!normalized) return 'Not specified';
+  return GENDER_OPTIONS.find((option) => option.value === normalized)?.label ?? 'Not specified';
 }
 
 export function genderFromUser(user: { user_metadata?: Record<string, unknown> } | null) {
