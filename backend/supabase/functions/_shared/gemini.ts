@@ -1,3 +1,4 @@
+import { generateJsonWithGroq, groqApiKey } from "./groq.ts";
 import { PublicError } from "./http.ts";
 
 export const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
@@ -55,12 +56,12 @@ export function unavailableError(statuses: number[], details: string[]) {
   return new PublicError("The AI couldn't respond right now. Please try again.", 502);
 }
 
-/** Tries each model in turn until one returns JSON that parses. */
+/** Tries each Gemini model in turn until one returns JSON that parses, then Groq as a backup. */
 export async function generateJson(models: string[], body: unknown): Promise<Record<string, unknown>> {
   const statuses: number[] = [];
   const details: string[] = [];
 
-  for (const model of models) {
+  for (const model of geminiApiKey ? models : []) {
     const response = await callGemini(model, body);
     const raw = await response.text();
     if (!response.ok) {
@@ -80,6 +81,16 @@ export async function generateJson(models: string[], body: unknown): Promise<Rec
     } catch {
       details.push(`${model}: invalid JSON: ${text.slice(0, 200)}`);
     }
+  }
+
+  if (groqApiKey) {
+    try {
+      return await generateJsonWithGroq(body);
+    } catch (error) {
+      details.push(error instanceof Error ? error.message : String(error));
+    }
+  } else if (!geminiApiKey) {
+    throw new Error("Neither GEMINI_API_KEY nor GROQ_API_KEY is set.");
   }
 
   throw unavailableError(statuses, details);

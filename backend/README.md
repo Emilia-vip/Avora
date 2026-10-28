@@ -19,6 +19,6 @@ npx supabase functions deploy suggest-outfit
 npx supabase functions deploy delete-account
 ```
 
-Secrets (Dashboard → Edge Functions → Secrets): `GEMINI_API_KEY`, optionally `REMOVE_BG_API_KEY`,
+Secrets (Dashboard → Edge Functions → Secrets): `GEMINI_API_KEY`, optionally `GROQ_API_KEY` (free backup AI when Gemini is out of quota), `GROQ_MODEL`, `REMOVE_BG_API_KEY`,
 `GEMINI_MODEL`, `GEMINI_SEGMENT_MODEL` and daily limits such as `AI_DAILY_LIMIT_SUGGEST_OUTFIT=200`
 (defaults: 60 analyses, 60 cut-outs, 100 outfit suggestions per user and day).
