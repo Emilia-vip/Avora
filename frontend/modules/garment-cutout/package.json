@@ -1,0 +1,7 @@
+{
+  "name": "garment-cutout",
+  "version": "1.0.0",
+  "description": "On-device garment cut-out with Apple Vision (iOS 17+) and Google ML Kit (Android)",
+  "main": "index.ts",
+  "private": true
+}

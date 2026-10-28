@@ -23,6 +23,7 @@ import {
 import { GarmentEditor, type GarmentEditorHandle } from '@/components/garment/garment-editor';
 import { displayTitle, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
+import { canCutOutOnDevice, cutOutOnDevice } from '../../../modules/garment-cutout';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { normalizeCategory } from '@/lib/clothing-category';
 import { functionErrorMessage } from '@/lib/function-error';
@@ -153,7 +154,7 @@ export default function Add() {
       // Details and cut-out run side by side; either one may fail without blocking the other.
       await Promise.all([
         readDetails(imagePath, run),
-        cutOutGarment(imagePath, run),
+        cutOutGarment(imagePath, uri, run),
       ]);
     } catch (error) {
       if (run !== photoRun.current) return;
@@ -208,7 +209,20 @@ export default function Add() {
     }
   };
 
-  const cutOutGarment = async (imagePath: string, run: number) => {
+  const cutOutGarment = async (imagePath: string, localUri: string, run: number) => {
+    // On the phone first: free and no AI quota. The editor saves whatever it shows, so a local file is enough.
+    if (canCutOutOnDevice()) {
+      try {
+        const cutout = await cutOutOnDevice(localUri);
+        if (run !== photoRun.current) return;
+        setCutoutUri(cutout);
+        setCutoutStatus('done');
+        return;
+      } catch (error) {
+        console.warn('on-device cut-out failed, trying the server', error);
+      }
+    }
+
     try {
       const { data, error } = await supabase.functions.invoke('cutout-clothing', {
         body: { storagePath: imagePath },
@@ -236,10 +250,10 @@ export default function Add() {
   };
 
   const retryCutout = async () => {
-    if (!uploadedPath) return;
+    if (!uploadedPath || !photoUri) return;
     setCutoutStatus('working');
     setCutoutError(null);
-    await cutOutGarment(uploadedPath, photoRun.current);
+    await cutOutGarment(uploadedPath, photoUri, photoRun.current);
   };
 
   const saveItem = async () => {

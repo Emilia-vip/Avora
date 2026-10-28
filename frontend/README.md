@@ -57,6 +57,20 @@ npm run lint      # ESLint
 
 Clear the Expo cache with `npx expo start -c`.
 
+### Free on-device cut-out (development build)
+
+`modules/garment-cutout` cuts garments out on the phone itself (Apple Vision on iOS 17+, Google ML Kit on
+Android), so it uses no AI quota. Expo Go can't load custom native code, so there the app falls back to the
+`cutout-clothing` edge function. To use the on-device cut-out, build the app once with a cable-connected phone:
+
+```bash
+npx expo run:ios --device       # needs a Mac with Xcode; a free Apple ID works
+npx expo run:android --device   # needs Android Studio
+```
+
+Then start the dev server with `npx expo start` as usual and open the Avora app (not Expo Go).
+Simulators may not support the cut-out; test on a real phone.
+
 ## Project structure
 
 ```text
@@ -70,6 +84,7 @@ src/
 ├── contexts/            # Auth state
 ├── hooks/               # Wardrobe, weather and theme hooks
 └── lib/                 # Supabase client, storage, outfit matching, settings
+modules/garment-cutout/  # Native on-device cut-out (iOS + Android)
 ```
 
 ## Troubleshooting
